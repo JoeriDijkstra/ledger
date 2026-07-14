@@ -95,6 +95,61 @@ defmodule Masthead.Themes.ManifestTest do
       out = Manifest.effective_tokens(m, %{"nope" => "x"})
       refute Map.has_key?(out, "nope")
     end
+
+    test "object and list tokens merge against their nested schema" do
+      {:ok, m} =
+        Manifest.parse(~s({
+          "name":"X","slug":"x","version":"1.0.0",
+          "tokens":[
+            {"key":"hero","label":"Hero","type":"object","fields":[
+              {"key":"title","label":"T","type":"string","default":"Default title"},
+              {"key":"boxed","label":"B","type":"boolean","default":true}]},
+            {"key":"links","label":"Links","type":"list","fields":[
+              {"key":"label","label":"L","type":"string","default":""},
+              {"key":"url","label":"U","type":"url","default":"#"}]}
+          ]
+        }))
+
+      # No overrides: the object fills its nested defaults, the list is empty.
+      assert %{"hero" => %{"title" => "Default title", "boxed" => true}, "links" => []} =
+               Manifest.effective_tokens(m, %{})
+
+      # Overrides: each list item is merged against the nested schema, so an
+      # unset subkey still arrives at the template with its default.
+      tokens =
+        Manifest.effective_tokens(m, %{
+          "hero" => %{"title" => "Custom", "boxed" => "false"},
+          "links" => [%{"label" => "Docs", "url" => "/docs"}, %{"label" => "Blog"}]
+        })
+
+      assert tokens["hero"] == %{"title" => "Custom", "boxed" => false}
+
+      assert tokens["links"] == [
+               %{"label" => "Docs", "url" => "/docs"},
+               %{"label" => "Blog", "url" => "#"}
+             ]
+    end
+
+    test "a list token's declared default items apply when there is no override" do
+      {:ok, m} =
+        Manifest.parse(~s({
+          "name":"X","slug":"x","version":"1.0.0",
+          "tokens":[
+            {"key":"links","label":"Links","type":"list",
+             "default":[{"label":"Home"}],
+             "fields":[
+               {"key":"label","label":"L","type":"string","default":""},
+               {"key":"url","label":"U","type":"url","default":"/"}]}
+          ]
+        }))
+
+      assert Manifest.effective_tokens(m, %{}) == %{
+               "links" => [%{"label" => "Home", "url" => "/"}]
+             }
+
+      # A stored empty list is a deliberate "no items", not "unset".
+      assert Manifest.effective_tokens(m, %{"links" => []}) == %{"links" => []}
+    end
   end
 
   describe "metadata schema parsing" do
@@ -223,6 +278,41 @@ defmodule Masthead.Themes.ManifestTest do
                )
 
       assert Enum.any?(errs, &String.contains?(&1, "tokens[0].type"))
+    end
+
+    test "tokens accept object and list containers (same as metadata)" do
+      json =
+        ~s({"name":"X","slug":"x","version":"1.0.0","tokens":[) <>
+          ~s({"key":"hero","label":"Hero","type":"object","fields":[) <>
+          ~s({"key":"title","label":"T","type":"string","default":"Hi"}]},) <>
+          ~s({"key":"links","label":"Links","type":"list","item_label":"Link","fields":[) <>
+          ~s({"key":"url","label":"U","type":"url","default":""}]}]})
+
+      assert {:ok, %Manifest{tokens: [hero, links]}} = Manifest.parse(json)
+      assert hero.type == "object"
+      assert [%{key: "title", type: "string"}] = hero.fields
+      assert links.type == "list"
+      assert links.item_label == "Link"
+      assert [%{key: "url", type: "url"}] = links.fields
+    end
+
+    test "a container token requires a non-empty fields list, and can't nest a container" do
+      assert {:error, errs} =
+               Manifest.parse(
+                 ~s({"name":"X","slug":"x","version":"1.0.0",) <>
+                   ~s("tokens":[{"key":"hero","label":"H","type":"object"}]})
+               )
+
+      assert Enum.any?(errs, &String.contains?(&1, "tokens[0].fields"))
+
+      assert {:error, errs} =
+               Manifest.parse(
+                 ~s({"name":"X","slug":"x","version":"1.0.0",) <>
+                   ~s("tokens":[{"key":"hero","label":"H","type":"object","fields":[) <>
+                   ~s({"key":"inner","label":"I","type":"list","fields":[]}]}]})
+               )
+
+      assert Enum.any?(errs, &String.contains?(&1, "tokens[0].fields[0].type"))
     end
   end
 

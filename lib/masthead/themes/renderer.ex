@@ -147,7 +147,7 @@ defmodule Masthead.Themes.Renderer do
     tokens =
       entry.manifest
       |> Manifest.effective_tokens(site.theme_tokens || %{})
-      |> resolve_file_tokens(file_keys, site)
+      |> resolve_file_fields(entry.manifest.tokens, site)
 
     base_context = %{
       "site" => Presenter.site(site),
@@ -295,15 +295,16 @@ defmodule Masthead.Themes.Renderer do
     effective =
       fields
       |> Manifest.merge_fields(raw)
-      |> resolve_file_metadata(fields, site)
+      |> resolve_file_fields(fields, site)
 
     Map.put(context, "page", Map.put(page, "metadata", effective))
   end
 
-  # Like file tokens, a `file`-typed metadata field stores an upload id; swap it
-  # for the upload's public URL so templates can use `page.metadata.<key>`
-  # directly. A blank or dangling id resolves to "".
-  defp resolve_file_metadata(effective, fields, site) when is_map(effective) do
+  # A `file`-typed field (token or metadata, at any nesting depth) stores an
+  # upload id; swap it for the upload's public URL so templates can use
+  # `theme.tokens.<key>` / `page.metadata.<key>` directly. A blank or dangling
+  # id resolves to "".
+  defp resolve_file_fields(effective, fields, site) when is_map(effective) do
     Enum.reduce(fields, effective, fn field, acc ->
       case field.type do
         "file" ->
@@ -313,7 +314,7 @@ defmodule Masthead.Themes.Renderer do
           obj = Map.get(acc, field.key)
 
           if is_map(obj),
-            do: Map.put(acc, field.key, resolve_file_metadata(obj, field.fields, site)),
+            do: Map.put(acc, field.key, resolve_file_fields(obj, field.fields, site)),
             else: acc
 
         "list" ->
@@ -323,7 +324,7 @@ defmodule Masthead.Themes.Renderer do
             Map.put(
               acc,
               field.key,
-              Enum.map(items, &resolve_file_metadata(&1, field.fields, site))
+              Enum.map(items, &resolve_file_fields(&1, field.fields, site))
             )
           else
             acc
@@ -335,7 +336,7 @@ defmodule Masthead.Themes.Renderer do
     end)
   end
 
-  defp resolve_file_metadata(other, _fields, _site), do: other
+  defp resolve_file_fields(other, _fields, _site), do: other
 
   defp resolve_theme(%Masthead.Sites.Site{theme_id: id}) when is_integer(id) do
     Themes.get_theme!(id)
@@ -353,16 +354,6 @@ defmodule Masthead.Themes.Renderer do
   # to a URL and emitted as `url(...)` in the cascade.
   defp file_token_keys(%Manifest{tokens: tokens}) do
     for %{key: key, type: "file"} <- tokens, into: MapSet.new(), do: key
-  end
-
-  # Replace each `file` token's stored upload id with the upload's public
-  # URL. A blank value or a dangling reference (deleted / wrong-site upload)
-  # resolves to "" so the template and CSS both fall back to "no file"
-  # instead of crashing the public page.
-  defp resolve_file_tokens(tokens, file_keys, site) do
-    Enum.reduce(file_keys, tokens, fn key, acc ->
-      Map.put(acc, key, resolve_upload_url(Map.get(acc, key), site))
-    end)
   end
 
   defp resolve_upload_url(id, site) when is_binary(id) and id != "" do
@@ -386,10 +377,17 @@ defmodule Masthead.Themes.Renderer do
   defp composed_css(theme_css, tokens, file_keys) do
     declarations =
       tokens
+      # `object`/`list` tokens are template-only — a map or a list of maps has
+      # no CSS custom-property form, so they never reach the `:root` block.
+      |> Enum.reject(fn {_k, v} -> is_map(v) or is_list(v) end)
       |> Enum.map_join(" ", fn {k, v} -> declaration(k, v, file_keys) end)
       |> String.trim()
 
-    theme_css <> "\n:root { " <> declarations <> " }\n"
+    if declarations == "" do
+      theme_css
+    else
+      theme_css <> "\n:root { " <> declarations <> " }\n"
+    end
   end
 
   # File tokens carry a resolved URL — wrap it as `url(...)` so themes can

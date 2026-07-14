@@ -514,17 +514,7 @@ defmodule Masthead.Themes.Package do
       "version" => m.version,
       "author" => m.author,
       "description" => m.description,
-      "tokens" =>
-        Enum.map(m.tokens, fn t ->
-          %{
-            "key" => t.key,
-            "label" => t.label,
-            "type" => t.type,
-            "default" => t.default,
-            "options" => t.options,
-            "category" => t.category
-          }
-        end),
+      "tokens" => Enum.map(m.tokens, &Manifest.field_to_map/1),
       "metadata" => Enum.map(m.metadata, &Manifest.field_to_map/1)
     }
   end

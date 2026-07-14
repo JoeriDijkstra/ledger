@@ -3,8 +3,17 @@ defmodule MastheadWeb.AdminLive.PageForm do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
+  import MastheadWeb.AdminLive.SettingsFields, only: [settings_fields: 1]
+
   alias Masthead.{Content, Themes, Uploads}
   alias Masthead.Content.Page
+  alias MastheadWeb.AdminLive.SettingsFields
+
+  # The form-name prefix a page's settings values are cast from, and the file
+  # picker they open. The editor itself is shared with the site's theme-token
+  # settings (`site[theme_tokens]`) — see `SettingsFields`.
+  defp prefix, do: "page[metadata]"
+  defp picker_target, do: "#page-meta-file-picker"
 
   @impl true
   def mount(params, _session, socket) do
@@ -35,15 +44,8 @@ defmodule MastheadWeb.AdminLive.PageForm do
 
     # Give any existing list-item metadata fresh `_id`s so the editor can track
     # them across add/remove/reorder.
-    draft =
-      Map.put(
-        draft,
-        "metadata",
-        hydrate_metadata(
-          draft["metadata"] || %{},
-          settings_fields_for(draft, theme_manifest, metadata_fields)
-        )
-      )
+    fields = settings_fields_for(draft, theme_manifest, metadata_fields)
+    draft = update_metadata(draft, &SettingsFields.hydrate(&1, fields))
 
     {:ok,
      socket
@@ -139,23 +141,7 @@ defmodule MastheadWeb.AdminLive.PageForm do
     Enum.map(names, fn name -> %{name: name, label: page_setting_label(manifest, name)} end)
   end
 
-  defp normalize_field_list(list) when is_list(list) do
-    Enum.map(list, fn f ->
-      %{
-        key: f["key"] || f[:key],
-        label: f["label"] || f[:label],
-        type: f["type"] || f[:type],
-        default: f["default"] || f[:default],
-        description: f["description"] || f[:description],
-        options: f["options"] || f[:options] || [],
-        category: f["category"] || f[:category],
-        item_label: f["item_label"] || f[:item_label],
-        fields: normalize_field_list(f["fields"] || f[:fields])
-      }
-    end)
-  end
-
-  defp normalize_field_list(_), do: []
+  defp normalize_field_list(list), do: SettingsFields.normalize_fields(list)
 
   @impl true
   def handle_event("choose_format", %{"format" => "theme"}, socket) do
@@ -195,7 +181,8 @@ defmodule MastheadWeb.AdminLive.PageForm do
       true ->
         # Seed the draft with the chosen template's settings (incl. any default
         # list items) so the editor opens pre-filled with the theme's defaults.
-        meta = hydrate_metadata(%{}, page_settings_fields(socket.assigns.theme_manifest, name))
+        meta =
+          SettingsFields.hydrate(%{}, page_settings_fields(socket.assigns.theme_manifest, name))
 
         {:noreply,
          update(socket, :draft, fn d ->
@@ -228,22 +215,18 @@ defmodule MastheadWeb.AdminLive.PageForm do
   end
 
   def handle_event("add_list_item", %{"key" => key}, socket) do
-    subfields = list_subfields(current_settings_fields(socket), key)
-    draft = update_metadata_list(socket.assigns.draft, key, &(&1 ++ [blank_list_item(subfields)]))
+    fields = current_settings_fields(socket)
+    draft = update_metadata(socket.assigns.draft, &SettingsFields.add_item(&1, fields, key))
     {:noreply, socket |> assign(draft: draft) |> assign_changeset(draft)}
   end
 
   def handle_event("remove_list_item", %{"key" => key, "id" => id}, socket) do
-    draft =
-      update_metadata_list(socket.assigns.draft, key, fn list ->
-        Enum.reject(list, &(to_string(&1["_id"]) == to_string(id)))
-      end)
-
+    draft = update_metadata(socket.assigns.draft, &SettingsFields.remove_item(&1, key, id))
     {:noreply, socket |> assign(draft: draft) |> assign_changeset(draft)}
   end
 
   def handle_event("reorder_list", %{"key" => key, "ids" => ids}, socket) do
-    draft = update_metadata_list(socket.assigns.draft, key, &reorder_by_id(&1, ids))
+    draft = update_metadata(socket.assigns.draft, &SettingsFields.reorder(&1, key, ids))
     {:noreply, socket |> assign(draft: draft) |> assign_changeset(draft)}
   end
 
@@ -403,7 +386,7 @@ defmodule MastheadWeb.AdminLive.PageForm do
 
     fields = current_settings_fields(socket)
     draft = merge_draft_params(socket.assigns.draft, page_params, fields)
-    canonical = canonicalize_metadata(draft["metadata"] || %{}, fields)
+    canonical = SettingsFields.canonicalize(metadata(draft), fields)
 
     full_params =
       draft
@@ -570,52 +553,21 @@ defmodule MastheadWeb.AdminLive.PageForm do
     }
   end
 
-  # The metadata input for the given field. The field's key lives at
-  # `page[metadata][<key>]` so it gets cast into the jsonb column.
-  defp metadata_value(draft, key) do
-    case Map.get(draft, "metadata") do
-      %{} = m -> Map.get(m, key) || Map.get(m, to_string(key)) || ""
-      _ -> ""
-    end
-  end
+  # The draft's settings values live under "metadata" (they're cast straight
+  # into the page's jsonb column); every mutation goes through the shared
+  # editor's value helpers.
+  defp metadata(draft), do: ensure_map(Map.get(draft, "metadata"))
 
-  # Put (or clear, when value is "") a single metadata key in the draft.
-  defp put_metadata_value(draft, key, value) do
-    meta = Map.get(draft, "metadata") || %{}
-    meta = if value == "", do: Map.delete(meta, key), else: Map.put(meta, key, value)
-    Map.put(draft, "metadata", meta)
-  end
+  defp update_metadata(draft, fun), do: Map.put(draft, "metadata", fun.(metadata(draft)))
 
-  defp put_object_value(draft, key, sub, value) do
-    meta = Map.get(draft, "metadata") || %{}
-    obj = Map.get(meta, key) || %{}
-    obj = if value == "", do: Map.delete(obj, sub), else: Map.put(obj, sub, value)
-    Map.put(draft, "metadata", Map.put(meta, key, obj))
-  end
+  defp put_metadata_value(draft, key, value),
+    do: update_metadata(draft, &SettingsFields.put_value(&1, key, value))
 
-  defp put_list_item_value(draft, key, id, sub, value) do
-    update_metadata_list(draft, key, fn list ->
-      Enum.map(list, fn item ->
-        cond do
-          to_string(item["_id"]) != to_string(id) -> item
-          value == "" -> Map.delete(item, sub)
-          true -> Map.put(item, sub, value)
-        end
-      end)
-    end)
-  end
+  defp put_object_value(draft, key, sub, value),
+    do: update_metadata(draft, &SettingsFields.put_object_value(&1, key, sub, value))
 
-  defp update_metadata_list(draft, key, fun) do
-    meta = Map.get(draft, "metadata") || %{}
-
-    list =
-      case Map.get(meta, key) do
-        l when is_list(l) -> l
-        _ -> []
-      end
-
-    Map.put(draft, "metadata", Map.put(meta, key, fun.(list)))
-  end
+  defp put_list_item_value(draft, key, id, sub, value),
+    do: update_metadata(draft, &SettingsFields.put_list_item_value(&1, key, id, sub, value))
 
   defp upload_value(nil), do: ""
   defp upload_value(upload), do: to_string(upload.id)
@@ -636,26 +588,6 @@ defmodule MastheadWeb.AdminLive.PageForm do
       else: metadata_fields
   end
 
-  defp list_subfields(fields, key) do
-    case Enum.find(fields, &(&1.key == key and &1.type == "list")) do
-      %{fields: sub} when is_list(sub) -> sub
-      _ -> []
-    end
-  end
-
-  defp blank_list_item(subfields) do
-    Enum.reduce(subfields, %{"_id" => new_meta_id()}, fn sf, acc -> Map.put(acc, sf.key, "") end)
-  end
-
-  defp reorder_by_id(list, ids) do
-    by_id = Map.new(list, &{to_string(&1["_id"]), &1})
-    ordered = Enum.flat_map(ids, fn id -> List.wrap(Map.get(by_id, to_string(id))) end)
-    seen = MapSet.new(ids, &to_string/1)
-    ordered ++ Enum.reject(list, &MapSet.member?(seen, to_string(&1["_id"])))
-  end
-
-  defp new_meta_id, do: System.unique_integer([:positive, :monotonic])
-
   # ---- schema-aware draft/params reconciliation ----
 
   # Fold submitted form params into the draft: non-metadata params shallow-merge
@@ -666,198 +598,14 @@ defmodule MastheadWeb.AdminLive.PageForm do
     draft = Map.merge(draft, rest)
 
     if is_map(meta_params) do
-      Map.put(draft, "metadata", merge_metadata(draft["metadata"] || %{}, meta_params, fields))
+      update_metadata(draft, &SettingsFields.merge_params(&1, meta_params, fields))
     else
       draft
     end
   end
 
-  defp merge_metadata(draft_meta, params_meta, fields) do
-    Enum.reduce(fields, draft_meta, fn field, acc ->
-      key = field.key
-
-      case field.type do
-        "object" ->
-          Map.put(
-            acc,
-            key,
-            merge_object(Map.get(acc, key) || %{}, Map.get(params_meta, key) || %{}, field.fields)
-          )
-
-        "list" ->
-          Map.put(
-            acc,
-            key,
-            merge_list(Map.get(acc, key) || [], Map.get(params_meta, key) || %{}, field.fields)
-          )
-
-        _ ->
-          case Map.fetch(params_meta, key) do
-            {:ok, v} -> Map.put(acc, key, v)
-            :error -> acc
-          end
-      end
-    end)
-  end
-
-  # Write only the subkeys present in params, preserving `_id` and any untouched
-  # keys (e.g. a file hidden input not in this change).
-  defp merge_object(draft_obj, params_obj, subfields) when is_map(params_obj) do
-    Enum.reduce(subfields, draft_obj, fn sf, acc ->
-      case Map.fetch(params_obj, sf.key) do
-        {:ok, v} -> Map.put(acc, sf.key, v)
-        :error -> acc
-      end
-    end)
-  end
-
-  defp merge_object(draft_obj, _params_obj, _subfields), do: draft_obj
-
-  # The draft list is authoritative for order/length/identity; params are keyed
-  # by each item's `_id`, so a stale/removed/reordered item can't bleed values.
-  defp merge_list(draft_list, params_map, subfields)
-       when is_list(draft_list) and is_map(params_map) do
-    Enum.map(draft_list, fn item ->
-      case Map.get(params_map, to_string(item["_id"])) do
-        %{} = item_params -> merge_object(item, item_params, subfields)
-        _ -> item
-      end
-    end)
-  end
-
-  defp merge_list(draft_list, _params_map, _subfields) when is_list(draft_list), do: draft_list
-  defp merge_list(_draft_list, _params_map, _subfields), do: []
-
-  # Strip the ephemeral `_id` and nested empties before persisting; keep empty
-  # list items (count/identity matters), drop empty subvalues (don't persist
-  # them as overrides — the renderer fills defaults).
-  defp canonicalize_metadata(meta, fields) do
-    Enum.reduce(fields, meta, fn field, acc ->
-      key = field.key
-
-      case {field.type, Map.get(acc, key)} do
-        {"object", %{} = obj} ->
-          Map.put(acc, key, strip_empty(obj))
-
-        {"list", list} when is_list(list) ->
-          Map.put(acc, key, Enum.map(list, &(&1 |> Map.delete("_id") |> strip_empty())))
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp strip_empty(map), do: map |> Enum.reject(fn {_k, v} -> v in [nil, ""] end) |> Map.new()
-
-  # Give each stored list item a fresh `_id` so the editor can track it; ensure
-  # object/list keys have the right container shape for rendering.
-  defp hydrate_metadata(meta, fields) when is_map(meta) do
-    Enum.reduce(fields, meta, fn field, acc ->
-      key = field.key
-
-      case field.type do
-        "list" ->
-          case Map.get(acc, key) do
-            list when is_list(list) ->
-              Map.put(acc, key, Enum.map(list, &Map.put(ensure_map(&1), "_id", new_meta_id())))
-
-            # No stored value yet → seed the schema's default items (if any).
-            _ ->
-              Map.put(acc, key, default_items(field))
-          end
-
-        "object" ->
-          if is_map(Map.get(acc, key)), do: acc, else: Map.put(acc, key, %{})
-
-        _ ->
-          acc
-      end
-    end)
-  end
-
-  defp hydrate_metadata(_meta, _fields), do: %{}
-
-  # Build a list field's default items (from its `default` array), each filled
-  # against the nested field defaults and given a tracking `_id`.
-  defp default_items(%{default: items, fields: subfields}) when is_list(items) do
-    subs = subfields || []
-
-    Enum.map(items, fn item ->
-      base = Enum.reduce(subs, %{}, fn sf, acc -> Map.put(acc, sf.key, sf.default) end)
-      base |> Map.merge(ensure_map(item)) |> Map.put("_id", new_meta_id())
-    end)
-  end
-
-  defp default_items(_), do: []
-
   defp ensure_map(m) when is_map(m), do: m
   defp ensure_map(_), do: %{}
-
-  # Resolve a file field's stored upload id to its upload struct (for preview).
-  defp selected_meta_upload(_uploads, value) when value in [nil, ""], do: nil
-
-  defp selected_meta_upload(uploads, value),
-    do: Enum.find(uploads, fn u -> to_string(u.id) == to_string(value) end)
-
-  defp file_ext(filename),
-    do: filename |> Path.extname() |> String.trim_leading(".") |> String.upcase()
-
-  # Render a list of settings fields, grouped into collapsible sections when any
-  # field declares a `category` (mirrors the theme token settings). When none
-  # do, they render as a flat list. `open` is the currently-expanded category.
-  attr :fields, :list, required: true
-  attr :draft, :map, required: true
-  attr :site_uploads, :list, default: []
-  attr :open, :string, default: nil
-
-  defp settings_fields(assigns) do
-    ~H"""
-    <%= if Enum.any?(@fields, &field_categorized?/1) do %>
-      <div class="token-groups">
-        <details
-          :for={{category, fields} <- group_fields(@fields)}
-          class="token-group"
-          open={@open == category}
-        >
-          <summary
-            class="token-group-summary"
-            phx-click="toggle_settings_group"
-            phx-value-group={category}
-          >
-            {category}
-          </summary>
-          <div class="settings-fields">
-            <.setting_input :for={f <- fields} field={f} draft={@draft} site_uploads={@site_uploads} />
-          </div>
-        </details>
-      </div>
-    <% else %>
-      <div class="settings-fields">
-        <.setting_input :for={f <- @fields} field={f} draft={@draft} site_uploads={@site_uploads} />
-      </div>
-    <% end %>
-    """
-  end
-
-  defp field_categorized?(%{category: c}) when is_binary(c), do: String.trim(c) != ""
-  defp field_categorized?(_), do: false
-
-  defp field_category(f),
-    do: if(field_categorized?(f), do: String.trim(f.category), else: "General")
-
-  # Group fields by category, preserving first-seen order of both categories
-  # and the fields within each.
-  defp group_fields(fields) do
-    Enum.reduce(fields, [], fn f, acc ->
-      cat = field_category(f)
-
-      case List.keyfind(acc, cat, 0) do
-        nil -> acc ++ [{cat, [f]}]
-        {^cat, list} -> List.keyreplace(acc, cat, 0, {cat, list ++ [f]})
-      end
-    end)
-  end
 
   defp import_flash(entity, ok, 0), do: "Imported #{ok} #{entity}s."
 
@@ -1257,7 +1005,9 @@ defmodule MastheadWeb.AdminLive.PageForm do
     <form id="settings-form" phx-submit="next_settings" phx-change="validate" class="form">
       <.settings_fields
         fields={@fields}
-        draft={@draft}
+        values={metadata(@draft)}
+        prefix={prefix()}
+        picker_target={picker_target()}
         site_uploads={@site_uploads}
         open={@open_group}
       />
@@ -1308,7 +1058,9 @@ defmodule MastheadWeb.AdminLive.PageForm do
 
           <.settings_fields
             fields={@fields}
-            draft={@draft}
+            values={metadata(@draft)}
+            prefix={prefix()}
+            picker_target={picker_target()}
             site_uploads={@site_uploads}
             open={@open_group}
           />
@@ -1414,274 +1166,4 @@ defmodule MastheadWeb.AdminLive.PageForm do
 
   defp template_label(name) when is_binary(name),
     do: name |> String.replace(["-", "_"], " ") |> String.capitalize()
-
-  # Dispatch a top-level settings field: container types render their own
-  # structure, everything else is a scalar input.
-  attr :field, :map, required: true
-  attr :draft, :map, required: true
-  attr :site_uploads, :list, default: []
-
-  defp setting_input(%{field: %{type: "object"}} = assigns), do: object_field(assigns)
-  defp setting_input(%{field: %{type: "list"}} = assigns), do: list_field(assigns)
-
-  defp setting_input(assigns) do
-    assigns =
-      assign(assigns,
-        name: "page[metadata][" <> assigns.field.key <> "]",
-        value: metadata_value(assigns.draft, assigns.field.key),
-        picker_ctx: %{"meta" => assigns.field.key}
-      )
-
-    scalar_field(assigns)
-  end
-
-  # An `object` field: a group of scalar subfields under one key.
-  defp object_field(assigns) do
-    assigns = assign(assigns, :obj, sub_map(assigns.draft, assigns.field.key))
-
-    ~H"""
-    <fieldset class="settings-group-field">
-      <legend>{@field.label}</legend>
-      <small :if={@field.description} class="muted">{@field.description}</small>
-      <div class="settings-fields">
-        <.scalar_field
-          :for={sf <- @field.fields}
-          field={sf}
-          name={"page[metadata][" <> @field.key <> "][" <> sf.key <> "]"}
-          value={sub_value(@obj, sf.key)}
-          picker_ctx={%{"meta" => @field.key, "sub" => sf.key}}
-          site_uploads={@site_uploads}
-        />
-      </div>
-    </fieldset>
-    """
-  end
-
-  # A `list` field: a repeatable group with add / remove / drag-reorder.
-  defp list_field(assigns) do
-    assigns = assign(assigns, :items, list_items(assigns.draft, assigns.field.key))
-
-    ~H"""
-    <fieldset class="settings-group-field">
-      <legend>{@field.label}</legend>
-      <small :if={@field.description} class="muted">{@field.description}</small>
-
-      <ul
-        id={"meta-list-" <> @field.key}
-        phx-hook="SortableList"
-        data-sortable-event="reorder_list"
-        data-sortable-key={@field.key}
-        class="settings-list"
-      >
-        <li
-          :for={item <- @items}
-          id={@field.key <> "-" <> to_string(item["_id"])}
-          draggable="true"
-          data-sortable-id={item["_id"]}
-          class="settings-list-item"
-        >
-          <span class="settings-list-drag" aria-hidden="true"><.drag_handle_icon /></span>
-          <div class="settings-fields settings-list-fields">
-            <.scalar_field
-              :for={sf <- @field.fields}
-              field={sf}
-              name={"page[metadata][" <> @field.key <> "][" <> to_string(item["_id"]) <> "][" <> sf.key <> "]"}
-              value={sub_value(item, sf.key)}
-              picker_ctx={%{"meta" => @field.key, "item" => to_string(item["_id"]), "sub" => sf.key}}
-              site_uploads={@site_uploads}
-            />
-          </div>
-          <button
-            type="button"
-            class="btn btn-sm btn-danger settings-list-remove"
-            phx-click="remove_list_item"
-            phx-value-key={@field.key}
-            phx-value-id={item["_id"]}
-          >
-            Remove
-          </button>
-        </li>
-      </ul>
-
-      <button type="button" class="btn btn-sm" phx-click="add_list_item" phx-value-key={@field.key}>
-        + Add {@field.item_label || @field.label}
-      </button>
-    </fieldset>
-    """
-  end
-
-  # A single scalar input. `name` is the full form name (so it works at any
-  # nesting depth) and `picker_ctx` is the file-picker context (`meta`/`sub`/
-  # `item`) round-tripped back via `{:file_picked, _, ctx}`.
-  attr :field, :map, required: true
-  attr :value, :any, required: true
-  attr :name, :string, required: true
-  attr :picker_ctx, :map, default: %{}
-  attr :site_uploads, :list, default: []
-
-  defp scalar_field(%{field: %{type: "file"}} = assigns) do
-    assigns =
-      assign(assigns,
-        selected: selected_meta_upload(assigns.site_uploads, assigns.value),
-        open_attrs: picker_attrs(assigns.picker_ctx) ++ [{"phx-value-current", assigns.value}],
-        clear_attrs: picker_attrs(assigns.picker_ctx)
-      )
-
-    ~H"""
-    <label>
-      {@field.label}
-      <div class="token-file">
-        <input type="hidden" name={@name} value={@value} />
-        <span :if={@selected} class="token-file-thumb">
-          <img :if={Uploads.image?(@selected)} src={Uploads.url(@selected)} alt="" />
-          <span :if={not Uploads.image?(@selected)} class="file-badge file-badge-sm">
-            {file_ext(@selected.filename)}
-          </span>
-        </span>
-        <span :if={@selected} class="token-file-name">{@selected.filename}</span>
-        <span :if={is_nil(@selected)} class="token-file-empty">No file selected</span>
-        <div class="token-file-actions">
-          <button
-            type="button"
-            class="btn btn-sm"
-            phx-click="open"
-            phx-target="#page-meta-file-picker"
-            {@open_attrs}
-          >
-            {if @selected, do: "Change", else: "Choose file"}
-          </button>
-          <button
-            :if={@selected}
-            type="button"
-            class="btn btn-sm"
-            phx-click="clear_meta"
-            {@clear_attrs}
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-      <small :if={@field.description}>{@field.description}</small>
-    </label>
-    """
-  end
-
-  defp scalar_field(%{field: %{type: "boolean"}} = assigns) do
-    assigns =
-      assign(assigns,
-        checked?: truthy?(assigns.value, assigns.field.default),
-        dom_id: field_dom_id(assigns.name)
-      )
-
-    ~H"""
-    <div class="settings-checkbox">
-      <label for={@dom_id} class="settings-checkbox-text">
-        <span>{@field.label}</span>
-        <small :if={@field.description}>{@field.description}</small>
-      </label>
-      <input type="hidden" name={@name} value="false" />
-      <input type="checkbox" id={@dom_id} name={@name} value="true" checked={@checked?} />
-    </div>
-    """
-  end
-
-  defp scalar_field(%{field: %{type: "select"}} = assigns) do
-    ~H"""
-    <label>
-      {@field.label}
-      <select name={@name}>
-        <option
-          :for={opt <- @field.options}
-          value={opt}
-          selected={to_string(opt) == to_string((@value == "" && @field.default) || @value)}
-        >
-          {opt}
-        </option>
-      </select>
-      <small :if={@field.description}>{@field.description}</small>
-    </label>
-    """
-  end
-
-  defp scalar_field(%{field: %{type: "text"}} = assigns) do
-    ~H"""
-    <label>
-      {@field.label}
-      <textarea name={@name} rows="3" placeholder={to_string(@field.default || "")}>{@value}</textarea>
-      <small :if={@field.description}>{@field.description}</small>
-    </label>
-    """
-  end
-
-  defp scalar_field(assigns) do
-    assigns =
-      assign(assigns, :display_value, metadata_display_value(assigns.value, assigns.field))
-
-    ~H"""
-    <label>
-      {@field.label}
-      <input type={metadata_input_type(@field.type)} name={@name} value={@display_value} />
-      <small :if={@field.description}>{@field.description}</small>
-    </label>
-    """
-  end
-
-  defp drag_handle_icon(assigns) do
-    ~H"""
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M9 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm0 7a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm-1.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM18 5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0Zm-1.5 8.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm0 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
-    </svg>
-    """
-  end
-
-  # File-picker context → phx-value-* attribute tuples for dynamic spreading.
-  defp picker_attrs(ctx), do: Enum.map(ctx, fn {k, v} -> {"phx-value-#{k}", v} end)
-
-  # A DOM-safe id from a bracketed input name (unique per nested path).
-  defp field_dom_id(name),
-    do: "meta-" <> (name |> String.replace(~r/[^a-zA-Z0-9_]+/, "-") |> String.trim("-"))
-
-  defp sub_map(draft, key) do
-    case Map.get(draft, "metadata") do
-      %{} = m -> ensure_map(Map.get(m, key))
-      _ -> %{}
-    end
-  end
-
-  defp list_items(draft, key) do
-    case Map.get(draft, "metadata") do
-      %{} = m -> (is_list(Map.get(m, key)) && Map.get(m, key)) || []
-      _ -> []
-    end
-  end
-
-  defp sub_value(map, key) when is_map(map),
-    do: Map.get(map, key) || Map.get(map, to_string(key)) || ""
-
-  defp sub_value(_map, _key), do: ""
-
-  # Show the page override if set, else the manifest default â matches the
-  # select field's behaviour so every settings input reflects its effective
-  # value (the color input has no placeholder to fall back on).
-  defp metadata_display_value(value, field) do
-    case value do
-      v when v in [nil, ""] -> to_string(field.default || "")
-      v -> to_string(v)
-    end
-  end
-
-  defp metadata_input_type("color"), do: "color"
-  defp metadata_input_type("number"), do: "number"
-  defp metadata_input_type("url"), do: "url"
-  defp metadata_input_type(_), do: "text"
-
-  defp truthy?(value, default) do
-    case value do
-      v when v in [true, "true", "on", "1", 1] -> true
-      v when v in [false, "false", "0", 0] -> false
-      # Unset (nil / "") â fall back to the manifest default so a field
-      # declared `"default": true` starts checked.
-      _ -> truthy?(default, false)
-    end
-  end
 end
