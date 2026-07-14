@@ -28,6 +28,14 @@ as a single Phoenix/OTP release.
 - **Per-page theme settings** come from the theme manifest's `metadata`
   schema, rendered as a form step in `AdminLive.PageForm`, stored in
   `pages.metadata` jsonb, merged with manifest defaults at render time.
+- **Settings fields are one system.** A manifest `token`, a `metadata`
+  field and a page's sidecar config field are the same declaration with
+  the same type set (scalars + `object`/`list` containers, one level
+  deep) — validated by `Themes.Manifest`, edited by the shared
+  `AdminLive.SettingsFields` (used by both `PageForm` and `SiteTheme`).
+  The only difference is the destination: tokens land in
+  `sites.theme_tokens`, metadata in `pages.metadata`, and only *scalar*
+  tokens also become CSS custom properties (`--accent`).
 - **Object storage** is pluggable via `Masthead.Storage.Adapter`
   (`Local` for dev, `S3` for prod). Call sites are adapter-agnostic.
 - **Content sanitization**: all post/page bodies pass through

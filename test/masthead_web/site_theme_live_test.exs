@@ -160,7 +160,7 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     # an "Upload new" add-card.
     html =
       lv
-      |> element(~s(button[phx-click="open"][phx-value-token="favicon"]))
+      |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
       |> render_click()
 
     assert html =~ "No file"
@@ -178,7 +178,7 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
 
     lv
-    |> element(~s(button[phx-click="open"][phx-value-token="favicon"]))
+    |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
     |> render_click()
 
     # Clicking a card selects it (the picker reports back to the LiveView,
@@ -200,7 +200,7 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
 
     lv
-    |> element(~s(button[phx-click="open"][phx-value-token="favicon"]))
+    |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
     |> render_click()
 
     # The uploader lives behind the "Upload new" add-card.
@@ -242,6 +242,130 @@ defmodule MastheadWeb.SiteThemeLiveTest do
 
     assert html =~ ~s(value="#ff0000")
     refute html =~ ~s(value="#0066cc")
+  end
+
+  describe "object/list tokens" do
+    setup %{site: site} do
+      slug = "cont#{System.unique_integer([:positive])}"
+      zip = build_container_token_theme_zip(slug)
+      {:ok, theme} = Masthead.Themes.Package.install(zip, site.owner_id)
+      File.rm(zip)
+      {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
+
+      {:ok, site: Sites.get_site!(site.id)}
+    end
+
+    test "they render like page metadata: subfield inputs, a seeded item, an Add button", %{
+      conn: conn,
+      site: site
+    } do
+      {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/theme")
+
+      # An object's subfields are named per-subkey; a list's items are named by
+      # their tracking id, and the theme's declared default item is seeded in.
+      assert html =~ ~s(name="site[theme_tokens][hero][title]")
+      assert html =~ ~s(phx-click="add_list_item")
+      assert html =~ ~s(phx-value-key="links")
+      assert html =~ "+ Add Link"
+      assert html =~ "Home"
+
+      # Container fields group into accordions by category like any other field.
+      assert html =~ ~s(phx-value-group="Hero")
+    end
+
+    test "an added list item is draggable, and saves as a nested map + real array", %{
+      conn: conn,
+      site: site
+    } do
+      {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
+
+      html =
+        lv
+        |> element(~s(button[phx-click="add_list_item"][phx-value-key="links"]))
+        |> render_click()
+
+      assert html =~ ~s(data-sortable-event="reorder_list")
+      assert html =~ ~r/<li[^>]*draggable="true"[^>]*data-sortable-id=/
+
+      # Fill in the object's subfield, then save the form.
+      lv
+      |> form("#site-theme-form", site: %{theme_tokens: %{hero: %{title: "Welcome"}}})
+      |> render_change()
+
+      lv |> form("#site-theme-form") |> render_submit()
+
+      tokens = Sites.get_site!(site.id).theme_tokens
+
+      # The object is a real map; the list a real array — the seeded default item
+      # first, then the (still empty) one we added, with no `_id` leaking in.
+      assert tokens["hero"] == %{"title" => "Welcome"}
+      assert [%{"label" => "Home"}, empty] = tokens["links"]
+      refute Map.has_key?(empty, "_id")
+    end
+
+    test "a removed list item stays removed after saving", %{conn: conn, site: site} do
+      {:ok, lv, html} = live(conn, ~p"/#{site.slug}/theme")
+
+      [_, id] = Regex.run(~r/data-sortable-id="(\d+)"/, html)
+
+      lv
+      |> element(~s(button[phx-click="remove_list_item"][phx-value-id="#{id}"]))
+      |> render_click()
+
+      lv |> form("#site-theme-form") |> render_submit()
+
+      assert Sites.get_site!(site.id).theme_tokens["links"] == []
+    end
+  end
+
+  # A theme whose tokens include an `object` and a `list` — the same field types
+  # a page's metadata can declare.
+  defp build_container_token_theme_zip(slug) do
+    files = %{
+      "manifest.json" =>
+        Jason.encode!(%{
+          "name" => "Container " <> slug,
+          "slug" => slug,
+          "version" => "1.0.0",
+          "tokens" => [
+            %{
+              "key" => "hero",
+              "label" => "Hero",
+              "type" => "object",
+              "category" => "Hero",
+              "fields" => [
+                %{"key" => "title", "label" => "Title", "type" => "string", "default" => ""},
+                %{"key" => "image", "label" => "Image", "type" => "file", "default" => ""}
+              ]
+            },
+            %{
+              "key" => "links",
+              "label" => "Links",
+              "type" => "list",
+              "category" => "Nav",
+              "item_label" => "Link",
+              "default" => [%{"label" => "Home"}],
+              "fields" => [
+                %{"key" => "label", "label" => "Label", "type" => "string", "default" => ""},
+                %{"key" => "url", "label" => "URL", "type" => "url", "default" => ""}
+              ]
+            }
+          ],
+          "metadata" => []
+        }),
+      "templates/layout.liquid" => "<html><head></head><body>{{ content }}</body></html>",
+      "templates/index.liquid" => "<h1>{{ site.name | escape }}</h1>",
+      "templates/post.liquid" => "<article>{{ body_html }}</article>",
+      "templates/page.liquid" => "<article>{{ body_html }}</article>",
+      "templates/blog.liquid" => "<h1>{{ page.title | escape }}</h1>",
+      "templates/not_found.liquid" => "<h1>Not found</h1>",
+      "theme.css" => "body { background: white; }"
+    }
+
+    tmp = Path.join(System.tmp_dir!(), "conttheme-#{System.unique_integer([:positive])}.zip")
+    entries = Enum.map(files, fn {n, b} -> {String.to_charlist(n), b} end)
+    {:ok, _} = :zip.create(String.to_charlist(tmp), entries)
+    tmp
   end
 
   defp create_upload(site, filename) do

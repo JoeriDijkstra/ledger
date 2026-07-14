@@ -32,6 +32,20 @@ defmodule Masthead.Themes.Manifest do
     * `boolean` — a checkbox. The value reaches templates as a real
       boolean (default is a JSON `true`/`false`), so themes can branch with
       `{% if theme.tokens.show_search %}`. Use for on/off feature toggles.
+    * `text` — a textarea; `url` — a URL input. Both are plain strings.
+    * `object` — a group of scalar subfields under one key, declared in a
+      nested `fields` list. Reaches templates as a map
+      (`{{ theme.tokens.hero.title }}`).
+    * `list` — a repeatable group of scalar subfields (nested `fields`, plus
+      an optional `item_label` for the "Add …" button and a `default` array of
+      seed items). Reaches templates as an array of maps, so themes can
+      `{% for link in theme.tokens.nav_links %}`.
+
+  Tokens and page metadata share one type set: anything a metadata field can
+  declare, a token can declare too. The only difference is what the value is
+  *for* — a scalar token also becomes a CSS custom property (`--accent`),
+  while `object`/`list` tokens are template-only (they have no CSS
+  representation, so they're skipped when the `:root` block is composed).
   """
 
   # A "field" — a customisation token, a global page-metadata field, or a
@@ -60,14 +74,8 @@ defmodule Masthead.Themes.Manifest do
     metadata: []
   ]
 
-  @type token :: %{
-          key: String.t(),
-          label: String.t(),
-          type: String.t(),
-          default: String.t() | boolean(),
-          options: [String.t()] | nil,
-          category: String.t() | nil
-        }
+  # A token *is* a field — same declaration, same types, same validator.
+  @type token :: metadata_field()
 
   @type metadata_field :: %{
           key: String.t(),
@@ -141,8 +149,8 @@ defmodule Masthead.Themes.Manifest do
           version: map["version"],
           author: map["author"],
           description: map["description"],
-          tokens: normalize_tokens(Map.get(map, "tokens", [])),
-          metadata: normalize_metadata(Map.get(map, "metadata", []))
+          tokens: normalize_fields(Map.get(map, "tokens", [])),
+          metadata: normalize_fields(Map.get(map, "metadata", []))
         }
 
         {:ok, manifest}
@@ -154,31 +162,31 @@ defmodule Masthead.Themes.Manifest do
 
   @doc """
   Return the merge of manifest token defaults with a map of per-site
-  override values. Unknown override keys are dropped. Values are strings
-  (interpolated directly into CSS) except `boolean` tokens, which are coerced
-  to real booleans for template branching.
+  override values.
+
+  Tokens use the same field types (and the same coercion) as metadata, so an
+  `object` token merges against its nested defaults and a `list` token comes
+  back as a list of merged maps. Two things differ from
+  `effective_metadata/2`:
+
+    * Unknown override keys are **dropped** — a token is inert without a
+      matching declaration, whereas metadata is preserved across theme
+      switches so the user doesn't lose page content.
+    * A blank scalar override falls back to the manifest default (the settings
+      form stores "" for "not overridden").
   """
-  @spec effective_tokens(t(), map()) :: %{String.t() => String.t() | boolean()}
+  @spec effective_tokens(t(), map()) :: %{String.t() => term()}
   def effective_tokens(%__MODULE__{tokens: tokens}, overrides) when is_map(overrides) do
-    Enum.reduce(tokens, %{}, fn %{key: key, type: type, default: default}, acc ->
-      raw =
-        case Map.get(overrides, key) do
-          v when is_binary(v) and v != "" -> v
-          _ -> default
+    Enum.reduce(tokens, %{}, fn field, acc ->
+      value =
+        case Map.get(overrides, field.key) do
+          v when v in [nil, ""] -> default_value(field)
+          v -> merge_value(field, v)
         end
 
-      Map.put(acc, key, coerce_token_value(type, raw))
+      Map.put(acc, field.key, value)
     end)
   end
-
-  # Tokens are interpolated into CSS as strings, except `boolean` tokens which
-  # are coerced to real booleans so templates can branch on them with
-  # `{% if theme.tokens.show_search %}` (a non-empty string is truthy in
-  # Liquid, so "false" would otherwise read as true).
-  defp coerce_token_value("boolean", v) when is_boolean(v), do: v
-  defp coerce_token_value("boolean", v) when v in ["true", "on", "1", 1], do: true
-  defp coerce_token_value("boolean", _), do: false
-  defp coerce_token_value(_type, v), do: v
 
   @doc """
   Return the merge of manifest metadata defaults with per-page overrides.
@@ -326,27 +334,12 @@ defmodule Masthead.Themes.Manifest do
         list
         |> Enum.with_index()
         |> Enum.reduce(errors, fn {tok, idx}, acc ->
-          validate_field(acc, tok, "tokens[#{idx}]", false)
+          validate_field(acc, tok, "tokens[#{idx}]")
         end)
 
       _ ->
         ["tokens: must be a list" | errors]
     end
-  end
-
-  defp normalize_tokens(list) when is_list(list) do
-    Enum.map(list, fn tok ->
-      %{
-        key: tok["key"],
-        label: tok["label"],
-        type: tok["type"],
-        default: tok["default"],
-        options: tok["options"],
-        # Optional grouping label; tokens with a category render in an
-        # accordion in the settings UI (uncategorized → "General").
-        category: tok["category"]
-      }
-    end)
   end
 
   defp validate_metadata(errors, map) do
@@ -439,7 +432,10 @@ defmodule Masthead.Themes.Manifest do
     end
   end
 
-  defp normalize_metadata(list) when is_list(list) do
+  # One normalizer for tokens, metadata and page-config fields. `category` is an
+  # optional grouping label: fields with one render in an accordion in the
+  # settings UI (uncategorized → "General").
+  defp normalize_fields(list) when is_list(list) do
     Enum.map(list, fn field ->
       %{
         key: field["key"],
@@ -455,7 +451,7 @@ defmodule Masthead.Themes.Manifest do
     end)
   end
 
-  defp normalize_nested(list) when is_list(list), do: normalize_metadata(list)
+  defp normalize_nested(list) when is_list(list), do: normalize_fields(list)
   defp normalize_nested(_), do: nil
 
   # ---- page config (templates/pages/<name>.json) ----
@@ -489,7 +485,7 @@ defmodule Masthead.Themes.Manifest do
          %{
            label: map["label"],
            description: map["description"],
-           metadata: normalize_metadata(Map.get(map, "metadata", []))
+           metadata: normalize_fields(Map.get(map, "metadata", []))
          }}
 
       errs ->

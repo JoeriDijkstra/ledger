@@ -162,10 +162,12 @@ defmodule Masthead.Sites.Site do
     end)
   end
 
-  # Site settings is a flat HTML form, so token overrides come in as
-  # `site[theme_tokens][<key>]` and arrive as a map of strings. Empty
-  # strings mean "fall back to the manifest default" — strip those out
-  # before storing so we don't pin the override to a blank value.
+  # Token overrides come in as `site[theme_tokens][<key>]`: a string for scalar
+  # tokens, a map for an `object` token, a list of maps for a `list` token.
+  # An empty string means "fall back to the manifest default" — strip those out
+  # so we don't pin the override to a blank value. Containers are stored as-is
+  # (the settings form canonicalizes them first: `_id`s and empty subvalues
+  # dropped), so an empty object/list is a deliberate "no items".
   defp normalize_theme_tokens(%{"theme_tokens" => tokens} = attrs) when is_map(tokens) do
     cleaned =
       tokens

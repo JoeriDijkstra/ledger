@@ -344,6 +344,80 @@ defmodule Masthead.Themes.RendererTest do
     end
   end
 
+  describe "object/list tokens" do
+    setup %{user: user, site: site} do
+      slug = "conttest#{System.unique_integer([:positive])}"
+      zip_path = build_container_token_theme_zip(slug)
+
+      {:ok, theme} = Masthead.Themes.Package.install(zip_path, user.id)
+      File.rm(zip_path)
+      {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
+
+      {:ok, site: Sites.get_site!(site.id)}
+    end
+
+    test "manifest defaults reach the template as a map and a list", %{site: site} do
+      out = Renderer.render_index(%{site: site, posts: [], pages: []})
+
+      assert out =~ ~s(data-hero-title="Default hero")
+      # The declared default item, filled out against the nested schema.
+      assert out =~ ~s(<li data-url="/" data-icon="">Home</li>)
+    end
+
+    test "per-site overrides win, and each list item merges the nested schema", %{site: site} do
+      {:ok, site} =
+        Sites.update_settings(site, %{
+          "theme_tokens" => %{
+            "hero" => %{"title" => "Custom hero"},
+            "links" => [%{"label" => "Docs", "url" => "/docs"}, %{"label" => "Blog"}]
+          }
+        })
+
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      assert out =~ ~s(data-hero-title="Custom hero")
+      assert out =~ ~s(<li data-url="/docs" data-icon="">Docs</li>)
+      # `url` unset on the second item → the nested default ("/"), not a blank.
+      assert out =~ ~s(<li data-url="/" data-icon="">Blog</li>)
+    end
+
+    test "a file inside an object or a list item resolves to its upload URL", %{site: site} do
+      logo = create_upload(site, "logo.png")
+      shot = create_upload(site, "shot.png")
+
+      {:ok, site} =
+        Sites.update_settings(site, %{
+          "theme_tokens" => %{
+            "hero" => %{"title" => "Hi", "image" => to_string(logo.id)},
+            "links" => [%{"label" => "Docs", "url" => "/docs", "icon" => to_string(shot.id)}]
+          }
+        })
+
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      assert out =~ ~s(data-hero-image="#{Uploads.url(logo)}")
+      assert out =~ ~s(data-icon="#{Uploads.url(shot)}")
+    end
+
+    test "container tokens never reach the CSS cascade", %{site: site} do
+      {:ok, site} =
+        Sites.update_settings(site, %{
+          "theme_tokens" => %{
+            "accent" => "#ff0000",
+            "hero" => %{"title" => "Custom hero"},
+            "links" => [%{"label" => "Docs", "url" => "/docs"}]
+          }
+        })
+
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      # A map/list has no CSS custom-property form: only the scalar is declared.
+      assert out =~ "--accent: #ff0000"
+      refute out =~ "--hero"
+      refute out =~ "--links"
+    end
+  end
+
   describe "file tokens" do
     test "a selected favicon resolves to a <link rel=icon> and a url() var", %{site: site} do
       upload = create_upload(site, "fav.png")
@@ -727,6 +801,66 @@ defmodule Masthead.Themes.RendererTest do
       # The generic page template renders rather than crashing.
       assert out =~ "GENERIC PAGE: Gone"
     end
+  end
+
+  # A theme whose tokens include an `object` and a `list` (each with a nested
+  # `file`), rendered into the index so we can prove containers reach templates
+  # and stay out of the CSS.
+  defp build_container_token_theme_zip(slug) do
+    files = %{
+      "manifest.json" =>
+        Jason.encode!(%{
+          "name" => "Container " <> slug,
+          "slug" => slug,
+          "version" => "1.0.0",
+          "tokens" => [
+            %{"key" => "accent", "label" => "Accent", "type" => "color", "default" => "#0066cc"},
+            %{
+              "key" => "hero",
+              "label" => "Hero",
+              "type" => "object",
+              "fields" => [
+                %{
+                  "key" => "title",
+                  "label" => "Title",
+                  "type" => "string",
+                  "default" => "Default hero"
+                },
+                %{"key" => "image", "label" => "Image", "type" => "file", "default" => ""}
+              ]
+            },
+            %{
+              "key" => "links",
+              "label" => "Links",
+              "type" => "list",
+              "item_label" => "Link",
+              "default" => [%{"label" => "Home"}],
+              "fields" => [
+                %{"key" => "label", "label" => "Label", "type" => "string", "default" => ""},
+                %{"key" => "url", "label" => "URL", "type" => "url", "default" => "/"},
+                %{"key" => "icon", "label" => "Icon", "type" => "file", "default" => ""}
+              ]
+            }
+          ],
+          "metadata" => []
+        }),
+      "templates/layout.liquid" =>
+        "<html><head></head><body>{{ theme.css }}{{ content }}</body></html>",
+      "templates/index.liquid" =>
+        ~s(<section data-hero-title="{{ theme.tokens.hero.title }}" data-hero-image="{{ theme.tokens.hero.image }}">) <>
+          ~s(<ul>{% for link in theme.tokens.links %}<li data-url="{{ link.url }}" data-icon="{{ link.icon }}">{{ link.label }}</li>{% endfor %}</ul>) <>
+          "</section>",
+      "templates/post.liquid" => "<article>{{ body_html }}</article>",
+      "templates/page.liquid" => "<article>{{ body_html }}</article>",
+      "templates/blog.liquid" => "<h1>{{ page.title | escape }}</h1>",
+      "templates/not_found.liquid" => "<h1>Not found</h1>",
+      "theme.css" => ":root { --accent: #0066cc; }"
+    }
+
+    tmp = Path.join(System.tmp_dir!(), "conttheme-#{System.unique_integer([:positive])}.zip")
+    entries = Enum.map(files, fn {n, b} -> {String.to_charlist(n), b} end)
+    {:ok, _} = :zip.create(String.to_charlist(tmp), entries)
+    tmp
   end
 
   # A theme exposing one page template (blog) with its own page_metadata.
