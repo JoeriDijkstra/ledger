@@ -5,14 +5,11 @@
       <span class="brand-name">Masthead</span>
     </a>
     <div class="nav-cta">
-      <a href="https://blog.masthead.site" target="_blank" rel="noopener" class="nav-link">
-        Blog
-      </a>
       <a href="https://docs.masthead.site" target="_blank" rel="noopener" class="nav-link">
         Docs
       </a>
       <a
-        href="https://github.com/JoeriDijkstra/masthead"
+        href="https://github.com/dijkstrasoftware/masthead"
         target="_blank"
         rel="noopener"
         class="github-btn"
@@ -44,12 +41,12 @@
 
   <section class="landing-hero">
     <div class="hero-inner">
-      <span class="hero-eyebrow">Open-source platform</span>
-      <h1>Simple websites without the complexity of traditional CMS platforms.</h1>
+      <span class="hero-eyebrow">Open-source publishing engine</span>
+      <h1>A publishing engine for content-driven websites.</h1>
       <p class="hero-lede">
-        Masthead is a hosted platform for blogs and small business sites. Each
-        site runs on its own subdomain, content is written in Markdown or
-        HTML, and the whole project is open source.
+        Masthead is an open-source publishing engine where themes define both
+        the website and the editing experience. Write in Markdown or HTML,
+        publish to your own domain, and focus on content instead of your CMS.
       </p>
       <div class="hero-cta">
         <%= if assigns[:current_user] do %>
@@ -59,12 +56,12 @@
         <% else %>
           <.link navigate={~p"/signup"} class="btn btn-primary btn-lg">Create your site</.link>
           <a
-            href="https://github.com/JoeriDijkstra/masthead"
+            href="https://docs.masthead.site"
             target="_blank"
             rel="noopener"
             class="btn btn-ghost btn-lg"
           >
-            View on GitHub
+            Read the docs
           </a>
         <% end %>
       </div>
@@ -79,10 +76,10 @@
           <span class="mock-url">your-site.masthead.site</span>
         </div>
         <div class="mock-body">
-          <span class="mock-eyebrow">Company Updates · Today</span>
-          <h3>Launching our new product line</h3>
+          <span class="mock-eyebrow">Engineering · Jul 15, 2026</span>
+          <h3>Why Masthead doesn't have a page builder</h3>
           <p>
-            Bring your team's writing online without the overhead of a traditional content management system.
+            The best editing experience isn't one with unlimited options. It's one designed specifically for the website you're publishing.
           </p>
           <span class="mock-link">Read &rarr;</span>
         </div>
@@ -91,7 +88,7 @@
   </section>
 
   <section class="landing-features">
-    <h2 class="section-title">What's included</h2>
+    <h2 class="section-title">Built for publishing</h2>
 
     <ul class="feature-grid">
       <li class="feature-card">
@@ -110,9 +107,9 @@
             />
           </svg>
         </div>
-        <h3>Custom domains</h3>
+        <h3>Theme-defined editors</h3>
         <p>
-          Point your own domain at any site — apex or subdomain. Masthead handles TLS automatically and serves over HTTPS the moment DNS resolves.
+          Every theme defines its own editing experience. Site owners only see the settings relevant to the website they're managing.
         </p>
       </li>
 
@@ -132,9 +129,9 @@
             />
           </svg>
         </div>
-        <h3>Unlimited sites</h3>
+        <h3>Custom domains</h3>
         <p>
-          Run as many sites as you need from one account — separate brands, products, or business units, all managed from a single dashboard.
+          Connect your own domain in minutes. Masthead verifies ownership, provisions TLS automatically, and serves every site securely over HTTPS.
         </p>
       </li>
 
@@ -154,9 +151,9 @@
             />
           </svg>
         </div>
-        <h3>Markdown and HTML editors</h3>
+        <h3>Content-first publishing</h3>
         <p>
-          Write in Markdown for speed or HTML for full design control. Both editors come with syntax highlighting so structure is always at a glance.
+          Write pages and posts in Markdown or HTML. Themes decide how content is presented, allowing the same content to power many different websites.
         </p>
       </li>
 
@@ -176,9 +173,9 @@
             />
           </svg>
         </div>
-        <h3>Built-in blog functionality</h3>
+        <h3>Multi-tenant by design</h3>
         <p>
-          Designate any page as a blog and Masthead generates the post list for you. Want it on the homepage? Toggle it in settings.
+          Manage multiple websites from a single account. Every site has its own content, theme, and domain while sharing the same dashboard.
         </p>
       </li>
 
@@ -198,9 +195,9 @@
             />
           </svg>
         </div>
-        <h3>Image library</h3>
+        <h3>Uploadable themes</h3>
         <p>
-          Upload once, reuse anywhere. Every image comes with copy-and-paste Markdown and HTML embed snippets ready for any page.
+          Install themes from the marketplace or upload your own. Every theme includes templates, styling, and a generated editor tailored to that website.
         </p>
       </li>
 
@@ -220,9 +217,9 @@
             />
           </svg>
         </div>
-        <h3>Custom uploadable themes</h3>
+        <h3>Open source</h3>
         <p>
-          Pick from built-in themes or upload your own zip — Liquid templates, CSS, and a manifest. Iterate on design without touching the platform.
+          Self-host Masthead or use the hosted version. The source code, CLI, and theme system are fully open source and designed for developers.
         </p>
       </li>
     </ul>
@@ -244,9 +241,9 @@
 
   <section class="landing-cta">
     <div class="cta-card">
-      <h2>Get started today.</h2>
+      <h2>Start publishing.</h2>
       <p>
-        Create an account, set up your first site, and publish in minutes. Or audit the source first.
+        Create your first site in minutes, or explore the documentation and build your own theme from scratch.
       </p>
       <div class="hero-cta">
         <%= if assigns[:current_user] do %>
@@ -254,12 +251,12 @@
         <% else %>
           <.link navigate={~p"/signup"} class="btn btn-primary btn-lg">Create your site</.link>
           <a
-            href="https://github.com/JoeriDijkstra/masthead"
+            href="https://docs.masthead.site"
             target="_blank"
             rel="noopener"
             class="btn btn-ghost btn-lg"
           >
-            View on GitHub
+            Read the docs
           </a>
         <% end %>
       </div>
@@ -283,7 +280,7 @@
       <% end %>
     </div>
     <a
-      href="https://github.com/JoeriDijkstra/masthead"
+      href="https://github.com/dijkstrasoftware/masthead"
       target="_blank"
       rel="noopener"
       class="github-btn"
