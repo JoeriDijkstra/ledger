@@ -38,6 +38,20 @@ defmodule Masthead.Themes.MarketplaceTest do
     if opts[:verified], do: elem(Themes.verify_theme(theme), 1), else: theme
   end
 
+  defp site_for(user) do
+    default = Themes.get_built_in_by_slug("default")
+
+    {:ok, site} =
+      Masthead.Sites.create_site(%{
+        "slug" => "s#{System.unique_integer([:positive])}",
+        "name" => "S",
+        "owner_id" => user.id,
+        "theme_id" => default.id
+      })
+
+    site
+  end
+
   describe "publish / verify" do
     test "publishing flips public; built-ins are protected", %{user: user} do
       theme = upload(user, "Mine")
@@ -79,32 +93,49 @@ defmodule Masthead.Themes.MarketplaceTest do
     end
   end
 
-  describe "install / uninstall" do
-    test "installing puts the theme in the user's library; uninstall removes it", %{
+  describe "install / uninstall (per site)" do
+    test "installing makes the theme selectable on the site; uninstall removes it", %{
       user: user,
       author: author
     } do
+      site = site_for(user)
       theme = published(author, "Installable")
 
-      refute MapSet.member?(Themes.installed_theme_ids(user.id), theme.id)
-      refute theme.id in (Themes.list_themes(user.id) |> Enum.map(& &1.id))
+      refute MapSet.member?(Themes.installed_theme_ids(site.id), theme.id)
+      refute theme.id in (Themes.list_themes_for_site(site) |> Enum.map(& &1.id))
 
-      {:ok, _} = Themes.install_theme(user.id, theme)
+      {:ok, _} = Themes.install_theme(site, theme)
 
-      assert MapSet.member?(Themes.installed_theme_ids(user.id), theme.id)
-      assert theme.id in (Themes.list_themes(user.id) |> Enum.map(& &1.id))
+      assert MapSet.member?(Themes.installed_theme_ids(site.id), theme.id)
+      assert theme.id in (Themes.list_themes_for_site(site) |> Enum.map(& &1.id))
 
       # Idempotent: a second install is a no-op.
-      {:ok, _} = Themes.install_theme(user.id, theme)
-      assert Themes.installed_theme_ids(user.id) |> MapSet.size() == 1
+      {:ok, _} = Themes.install_theme(site, theme)
+      assert Themes.installed_theme_ids(site.id) |> MapSet.size() == 1
 
-      {:ok, _} = Themes.uninstall_theme(user.id, theme.id)
-      refute MapSet.member?(Themes.installed_theme_ids(user.id), theme.id)
+      {:ok, _} = Themes.uninstall_theme(site, theme.id)
+      refute MapSet.member?(Themes.installed_theme_ids(site.id), theme.id)
     end
 
-    test "an unpublished theme cannot be installed", %{user: user, author: author} do
+    test "the site owner can install their own unpublished theme", %{user: user} do
+      site = site_for(user)
+      theme = upload(user, "Draft")
+      assert {:ok, _} = Themes.install_theme(site, theme)
+    end
+
+    test "another user's unpublished theme cannot be installed", %{user: user, author: author} do
+      site = site_for(user)
       theme = upload(author, "Draft")
-      assert {:error, :not_published} = Themes.install_theme(user.id, theme)
+      assert {:error, :not_installable} = Themes.install_theme(site, theme)
+    end
+
+    test "the site's active theme cannot be uninstalled", %{user: user, author: author} do
+      site = site_for(user)
+      theme = published(author, "Active")
+      {:ok, _} = Themes.install_theme(site, theme)
+      {:ok, site} = Masthead.Sites.update_settings(site, %{"theme_id" => theme.id})
+
+      assert {:error, :in_use} = Themes.uninstall_theme(site, theme.id)
     end
   end
 

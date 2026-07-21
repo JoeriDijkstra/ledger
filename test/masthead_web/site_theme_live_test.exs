@@ -33,23 +33,22 @@ defmodule MastheadWeb.SiteThemeLiveTest do
   end
 
   test "the selected theme can be changed and saved", %{conn: conn, site: site} do
-    tailwind = Themes.get_built_in_by_slug("tailwind")
+    # A site can only select themes installed onto it; install a second one.
+    theme = install_theme_onto(site, build_uncategorized_theme_zip("pick#{uniq()}"))
+
     {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
 
     lv
-    |> form("#site-theme-form", site: %{theme_id: tailwind.id})
+    |> form("#site-theme-form", site: %{theme_id: theme.id})
     |> render_submit()
 
-    assert Sites.get_site!(site.id).theme_id == tailwind.id
+    assert Sites.get_site!(site.id).theme_id == theme.id
   end
 
   test "a theme without token categories renders the tokens flat", %{conn: conn, site: site} do
-    # The built-in themes all group their tokens now, so install a custom
-    # theme whose token has no category to exercise the flat path.
-    slug = "flat#{System.unique_integer([:positive])}"
-    zip = build_uncategorized_theme_zip(slug)
-    {:ok, theme} = Masthead.Themes.Package.install(zip, site.owner_id)
-    File.rm(zip)
+    # The built-in default groups its tokens, so install a custom theme whose
+    # token has no category to exercise the flat path.
+    theme = install_theme_onto(site, build_uncategorized_theme_zip("flat#{uniq()}"))
     {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
 
     {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/theme")
@@ -84,6 +83,60 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     tmp
   end
 
+  defp uniq, do: System.unique_integer([:positive])
+
+  # Install an uploaded theme zip and make it available on the site, so the
+  # site's theme picker (Default + installed) can select it.
+  defp install_theme_onto(site, zip) do
+    {:ok, theme} = Masthead.Themes.Package.install(zip, site.owner_id)
+    File.rm(zip)
+    {:ok, _} = Themes.install_theme(site, theme)
+    theme
+  end
+
+  # A theme with categorized tokens (Header + Footer) plus one uncategorized
+  # token (→ General), to exercise the accordion grouping.
+  defp build_categorized_theme_zip(slug) do
+    files = %{
+      "manifest.json" =>
+        Jason.encode!(%{
+          "name" => "Cat " <> slug,
+          "slug" => slug,
+          "version" => "1.0.0",
+          "tokens" => [
+            %{
+              "key" => "header_bg",
+              "label" => "Header background",
+              "type" => "color",
+              "default" => "#ffffff",
+              "category" => "Header"
+            },
+            %{
+              "key" => "footer_bg",
+              "label" => "Footer background",
+              "type" => "color",
+              "default" => "#000000",
+              "category" => "Footer"
+            },
+            %{"key" => "accent", "label" => "Accent", "type" => "color", "default" => "#123456"}
+          ],
+          "metadata" => []
+        }),
+      "templates/layout.liquid" => "<html><head></head><body>{{ content }}</body></html>",
+      "templates/index.liquid" => "<h1>{{ site.name | escape }}</h1>",
+      "templates/post.liquid" => "<article>{{ body_html }}</article>",
+      "templates/page.liquid" => "<article>{{ body_html }}</article>",
+      "templates/blog.liquid" => "<h1>{{ page.title | escape }}</h1>",
+      "templates/not_found.liquid" => "<h1>Not found</h1>",
+      "theme.css" => "body { background: white; }"
+    }
+
+    tmp = Path.join(System.tmp_dir!(), "cattheme-#{System.unique_integer([:positive])}.zip")
+    entries = Enum.map(files, fn {n, b} -> {String.to_charlist(n), b} end)
+    {:ok, _} = :zip.create(String.to_charlist(tmp), entries)
+    tmp
+  end
+
   test "a boolean token renders as a checkbox", %{conn: conn, site: site} do
     {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/theme")
     assert html =~ ~s(name="site[theme_tokens][show_search]")
@@ -104,15 +157,15 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     conn: conn,
     site: site
   } do
-    tailwind = Themes.get_built_in_by_slug("tailwind")
-    {:ok, site} = Sites.update_settings(site, %{"theme_id" => tailwind.id})
+    theme = install_theme_onto(site, build_categorized_theme_zip("cat#{uniq()}"))
+    {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
 
     {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/theme")
 
     assert html =~ "token-group-summary"
     assert html =~ ~s(phx-value-group="Header")
     assert html =~ ~s(phx-value-group="Footer")
-    # logo/favicon/accent/cta have no category → grouped under General.
+    # the uncategorized accent token → grouped under General.
     assert html =~ ~s(phx-value-group="General")
   end
 
@@ -120,8 +173,8 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     conn: conn,
     site: site
   } do
-    tailwind = Themes.get_built_in_by_slug("tailwind")
-    {:ok, site} = Sites.update_settings(site, %{"theme_id" => tailwind.id})
+    theme = install_theme_onto(site, build_categorized_theme_zip("cat#{uniq()}"))
+    {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
     {:ok, lv, _} = live(conn, ~p"/#{site.slug}/theme")
 
     open_header = ~r/<details[^>]*\bopen\b[^>]*>\s*<summary[^>]*phx-value-group="Header"/
@@ -246,10 +299,7 @@ defmodule MastheadWeb.SiteThemeLiveTest do
 
   describe "object/list tokens" do
     setup %{site: site} do
-      slug = "cont#{System.unique_integer([:positive])}"
-      zip = build_container_token_theme_zip(slug)
-      {:ok, theme} = Masthead.Themes.Package.install(zip, site.owner_id)
-      File.rm(zip)
+      theme = install_theme_onto(site, build_container_token_theme_zip("cont#{uniq()}"))
       {:ok, site} = Sites.update_settings(site, %{"theme_id" => theme.id})
 
       {:ok, site: Sites.get_site!(site.id)}

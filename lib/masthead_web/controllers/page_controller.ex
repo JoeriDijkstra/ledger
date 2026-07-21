@@ -39,6 +39,12 @@ defmodule MastheadWeb.PageController do
     end
   end
 
+  # The standalone Themes section was folded into the Marketplace hub.
+  # Keep the old URL working for bookmarks.
+  def themes_redirect(conn, _params) do
+    redirect(conn, to: "/marketplace/my-themes")
+  end
+
   defp home_json_ld do
     home = url(~p"/")
     logo = url(~p"/images/logo.png")

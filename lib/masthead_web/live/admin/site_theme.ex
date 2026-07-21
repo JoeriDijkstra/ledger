@@ -21,7 +21,7 @@ defmodule MastheadWeb.AdminLive.SiteTheme do
   def mount(_params, _session, socket) do
     site = socket.assigns.site
     changeset = Sites.change_settings(site)
-    themes = Themes.list_themes(socket.assigns.current_user.id)
+    themes = Themes.list_themes_for_site(site)
     selected = pick_theme(themes, current_theme_id(changeset, site))
     fields = token_fields(selected)
 
@@ -275,7 +275,10 @@ defmodule MastheadWeb.AdminLive.SiteTheme do
                   />
                   <span class="theme-picker-card-name">{t.name}</span>
                 </label>
-                <.link class="theme-picker-card theme-picker-card-add" navigate={~p"/themes"}>
+                <.link
+                  class="theme-picker-card theme-picker-card-add"
+                  navigate={~p"/marketplace?#{[for: @site.slug]}"}
+                >
                   <span class="theme-picker-card-icon" aria-hidden="true">+</span>
                 </.link>
               </fieldset>

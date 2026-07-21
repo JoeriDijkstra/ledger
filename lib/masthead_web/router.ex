@@ -63,6 +63,9 @@ defmodule MastheadWeb.Router do
     post "/account/password", AccountController, :update_password
     post "/account/disable", AccountController, :disable
 
+    # The Themes section merged into the Marketplace hub; keep the old URL.
+    get "/themes", PageController, :themes_redirect
+
     # Admin overview — defined before the `/:site_slug` catch-all so "admin"
     # isn't resolved as a site slug.
     live_session :admin,
@@ -76,9 +79,12 @@ defmodule MastheadWeb.Router do
       on_mount: [{MastheadWeb.UserAuth, :require_authenticated}] do
       live "/sites", AdminLive.SiteIndex, :index
 
-      live "/marketplace", AdminLive.Marketplace, :index
-
-      live "/themes", AdminLive.ThemeLibrary, :index
+      # The active filter lives in the URL so each view is linkable.
+      live "/marketplace", AdminLive.Marketplace, :all
+      live "/marketplace/verified", AdminLive.Marketplace, :verified
+      live "/marketplace/community", AdminLive.Marketplace, :community
+      live "/marketplace/my-themes", AdminLive.Marketplace, :mine
+      live "/marketplace/my-themes/:theme_id", AdminLive.ThemeManage, :show
 
       live "/:site_slug", AdminLive.SiteDashboard, :show
       live "/:site_slug/settings", AdminLive.SiteSettings, :edit

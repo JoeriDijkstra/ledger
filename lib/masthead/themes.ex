@@ -26,27 +26,33 @@ defmodule Masthead.Themes do
                  Enum.map(~w(layout index post page blog not_found), &"templates/#{&1}.liquid")
 
   @doc """
-  List every theme in the given user's library:
-
-    * all built-ins,
-    * the user's own uploads,
-    * marketplace themes the user has installed.
-
-  Published themes the user *hasn't* installed are not here — they live in
-  the marketplace until installed.
+  A user's own uploaded themes, for the marketplace "My themes" view. The
+  only built-in (Default) is installed on every site already, so it's not
+  listed here. Installing onto a site is separate — see `list_themes_for_site/1`.
   """
   def list_themes(user_id) when is_integer(user_id) do
-    installed = from(i in ThemeInstall, where: i.user_id == ^user_id, select: i.theme_id)
-
     Repo.all(
       from t in Theme,
-        where: t.source == "built_in" or t.owner_id == ^user_id or t.id in subquery(installed),
-        order_by: ^theme_order()
+        where: t.owner_id == ^user_id,
+        order_by: ^theme_order(),
+        preload: [:images]
     )
   end
 
-  def list_themes(nil) do
-    Repo.all(from t in Theme, where: t.source == "built_in", order_by: ^theme_order())
+  def list_themes(nil), do: []
+
+  @doc """
+  Themes a site can select as its active theme: all built-ins (Default)
+  plus every theme installed onto the site.
+  """
+  def list_themes_for_site(%Masthead.Sites.Site{id: site_id}) do
+    installed = from(i in ThemeInstall, where: i.site_id == ^site_id, select: i.theme_id)
+
+    Repo.all(
+      from t in Theme,
+        where: t.source == "built_in" or t.id in subquery(installed),
+        order_by: ^theme_order()
+    )
   end
 
   @doc "List only built-in themes."
@@ -103,6 +109,14 @@ defmodule Masthead.Themes do
 
   def update_theme(%Theme{source: "uploaded"} = theme, attrs) do
     theme |> Theme.upload_changeset(attrs) |> Repo.update()
+  end
+
+  @doc "Changeset for the theme manage page's description form."
+  def change_details(%Theme{} = theme, attrs \\ %{}), do: Theme.details_changeset(theme, attrs)
+
+  @doc "Update an uploaded theme's marketplace details (description)."
+  def update_details(%Theme{source: "uploaded"} = theme, attrs) do
+    theme |> Theme.details_changeset(attrs) |> Repo.update()
   end
 
   @doc """
@@ -198,10 +212,10 @@ defmodule Masthead.Themes do
 
   @doc """
   Published themes available to install, for the marketplace browser.
-  Excludes the viewer's own themes (you already have them). Verified
-  themes rank first (then community), each group alphabetical — in
-  Postgres `true > false`, so `desc: verified` floats verified to the top.
-  Owner and gallery images are preloaded for the grid.
+  Excludes the viewer's own themes (they live under "My themes"). Verified
+  themes rank first (then community), each group alphabetical — in Postgres
+  `true > false`, so `desc: verified` floats verified to the top. Owner and
+  gallery images are preloaded for the grid.
   """
   def list_marketplace(user_id, filter \\ :all, search \\ nil) when is_integer(user_id) do
     from(t in Theme,
@@ -221,32 +235,43 @@ defmodule Masthead.Themes do
 
   defp apply_marketplace_filter(query, _all), do: query
 
-  @doc "Set of theme ids the user has installed (for marketplace install state)."
-  def installed_theme_ids(user_id) when is_integer(user_id) do
-    Repo.all(from i in ThemeInstall, where: i.user_id == ^user_id, select: i.theme_id)
+  @doc "Set of theme ids installed on a site (for marketplace install state)."
+  def installed_theme_ids(site_id) when is_integer(site_id) do
+    Repo.all(from i in ThemeInstall, where: i.site_id == ^site_id, select: i.theme_id)
     |> MapSet.new()
   end
 
   @doc """
-  Install a published theme into the user's library. Idempotent — a repeat
-  install is a no-op. Only published (`public`) themes can be installed.
+  Install a theme onto a site (from the marketplace, in a site's context).
+  Idempotent — a repeat install is a no-op. A theme is installable when it
+  is published (`public`) or owned by the site's owner (so you can put your
+  own not-yet-published theme on your site).
   """
-  def install_theme(user_id, %Theme{public: true} = theme) when is_integer(user_id) do
-    %ThemeInstall{}
-    |> ThemeInstall.changeset(%{user_id: user_id, theme_id: theme.id})
-    |> Repo.insert(on_conflict: :nothing)
+  def install_theme(%Masthead.Sites.Site{} = site, %Theme{} = theme) do
+    if theme.public or theme.owner_id == site.owner_id do
+      %ThemeInstall{}
+      |> ThemeInstall.changeset(%{site_id: site.id, theme_id: theme.id})
+      |> Repo.insert(on_conflict: :nothing)
+    else
+      {:error, :not_installable}
+    end
   end
 
-  def install_theme(_user_id, %Theme{}), do: {:error, :not_published}
+  @doc """
+  Remove a theme installed on a site. Refuses to uninstall the site's
+  currently active theme (`{:error, :in_use}`) so a site is never themeless.
+  """
+  def uninstall_theme(%Masthead.Sites.Site{} = site, theme_id) do
+    if site.theme_id == theme_id do
+      {:error, :in_use}
+    else
+      {count, _} =
+        Repo.delete_all(
+          from i in ThemeInstall, where: i.site_id == ^site.id and i.theme_id == ^theme_id
+        )
 
-  @doc "Remove an installed theme from the user's library."
-  def uninstall_theme(user_id, theme_id) when is_integer(user_id) do
-    {count, _} =
-      Repo.delete_all(
-        from i in ThemeInstall, where: i.user_id == ^user_id and i.theme_id == ^theme_id
-      )
-
-    {:ok, count}
+      {:ok, count}
+    end
   end
 
   # ---- gallery images ----

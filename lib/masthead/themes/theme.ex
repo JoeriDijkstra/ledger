@@ -20,7 +20,7 @@ defmodule Masthead.Themes.Theme do
   import Ecto.Changeset
 
   @sources ~w(built_in uploaded)
-  @reserved_slugs ~w(default studio tailwind)
+  @reserved_slugs ~w(default)
 
   schema "themes" do
     field :slug, :string
@@ -32,6 +32,7 @@ defmodule Masthead.Themes.Theme do
     field :manifest, :map, default: %{}
     field :public, :boolean, default: false
     field :verified, :boolean, default: false
+    field :price_cents, :integer, default: 0
     belongs_to :owner, Masthead.Accounts.User
     has_many :sites, Masthead.Sites.Site
     has_many :images, Masthead.Themes.ThemeImage, foreign_key: :theme_id
@@ -96,6 +97,28 @@ defmodule Masthead.Themes.Theme do
     theme
     |> cast(attrs, [:verified])
     |> validate_required([:verified])
+  end
+
+  @doc """
+  Changeset for editing an uploaded theme's marketplace details (the
+  description shown on its listing), from the theme manage page.
+  """
+  def details_changeset(theme, attrs) do
+    theme
+    |> cast(attrs, [:description])
+    |> validate_length(:description, max: 500)
+  end
+
+  @doc """
+  Changeset setting an uploaded theme's price. Kept separate from
+  `upload_changeset/2` so only owners (not editors) can touch pricing.
+  A price of `0` means free.
+  """
+  def pricing_changeset(theme, attrs) do
+    theme
+    |> cast(attrs, [:price_cents])
+    |> validate_required([:price_cents])
+    |> validate_number(:price_cents, greater_than_or_equal_to: 0)
   end
 
   @doc "Slugs that can never be claimed by uploaded themes."

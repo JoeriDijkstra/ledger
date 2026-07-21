@@ -26,6 +26,7 @@ defmodule MastheadWeb.AdminLive.Components do
 
   slot :inner_block, required: true
   slot :actions
+  slot :title_meta
 
   def shell(assigns) do
     ~H"""
@@ -129,10 +130,6 @@ defmodule MastheadWeb.AdminLive.Components do
               <.icon_store />
             </.nav_link>
 
-            <.nav_link href={~p"/themes"} label="Themes" active={@active == :themes}>
-              <.icon_palette />
-            </.nav_link>
-
             <.nav_link
               :if={@current_user && @current_user.admin}
               href={~p"/admin"}
@@ -199,8 +196,11 @@ defmodule MastheadWeb.AdminLive.Components do
           </div>
         </div>
 
-        <div :if={@title || @actions != []} class="page-head">
-          <h1 :if={@title}>{@title}</h1>
+        <div :if={@title || @actions != [] || @title_meta != []} class="page-head">
+          <div class="page-head-title">
+            <h1 :if={@title}>{@title}</h1>
+            {render_slot(@title_meta)}
+          </div>
           <div class="actions">{render_slot(@actions)}</div>
         </div>
 
