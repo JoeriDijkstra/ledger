@@ -61,7 +61,7 @@ defmodule MastheadWeb.AdminConsoleLiveTest do
       |> element(~s(button[phx-value-scope="themes"][phx-value-filter="built_in"]))
       |> render_click()
 
-    assert html =~ "Tailwind"
+    assert html =~ "Default"
   end
 
   test "tab and filter are read from the URL", %{conn: conn, member: member, site: site} do

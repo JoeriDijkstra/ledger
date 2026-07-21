@@ -1,5 +1,0 @@
-/* Styling for this theme comes from the Tailwind Play CDN loaded in
-   layout.liquid (with the typography plugin for `prose` bodies), which JITs
-   utilities at runtime — so authors can use any Tailwind class, including
-   arbitrary-value classes like min-h-[60vh], directly in their page/post
-   content. This file is intentionally minimal; add custom CSS overrides here. */

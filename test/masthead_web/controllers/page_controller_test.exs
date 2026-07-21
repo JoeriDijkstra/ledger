@@ -5,7 +5,7 @@ defmodule MastheadWeb.PageControllerTest do
     conn = get(conn, ~p"/")
 
     assert html_response(conn, 200) =~
-             "Simple websites without the complexity of traditional CMS platforms."
+             "A publishing engine for content-driven websites."
   end
 
   test "GET / renders SEO metadata", %{conn: conn} do

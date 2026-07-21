@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="420" viewBox="0 0 600 420">
+  <defs>
+    <linearGradient id="tg" x1="300" y1="20" x2="300" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="gray" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="gray" stop-opacity=".12"/>
+      <stop offset="1" stop-color="gray" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <path d="M78 262c-22 12-40 36-33 62 7 26 40 38 66 35 22-3 42-13 64-13 24 0 46 14 70 14 28 0 52-18 80-22 32-4 64 8 96 8 24 0 48-8 63-26 15-18 12-46-4-62-22-22-58-16-86-6-18 6-36 14-54 8-18-6-30-22-46-30-26-12-58-6-82 6-26 12-45 33-71 30-22-2-47-9-67 6Z" fill="#2563eb" opacity=".15"/>
+
+  <!-- theme preview window -->
+  <rect x="150" y="96" width="300" height="216" rx="12" fill="url(#tg)"/>
+  <rect x="154" y="100" width="292" height="22" rx="7" fill="#2563eb"/>
+  <circle cx="168" cy="111" r="3.4" fill="#fa595f"/>
+  <circle cx="180" cy="111" r="3.4" fill="#ffc74c"/>
+  <circle cx="192" cy="111" r="3.4" fill="#85d459"/>
+  <rect x="154" y="122" width="292" height="186" rx="0" fill="#ffffff"/>
+
+  <!-- hero band + content lines -->
+  <rect x="154" y="122" width="292" height="52" fill="#2563eb" opacity=".9"/>
+  <rect x="176" y="140" width="150" height="9" rx="4" fill="#ffffff" opacity=".85"/>
+  <rect x="176" y="156" width="96" height="6" rx="3" fill="#ffffff" opacity=".55"/>
+  <rect x="176" y="196" width="240" height="9" rx="4" fill="#2563eb" opacity=".25"/>
+  <rect x="176" y="216" width="180" height="6" rx="3" fill="#cbd5e1"/>
+  <rect x="176" y="230" width="210" height="6" rx="3" fill="#cbd5e1"/>
+  <rect x="176" y="258" width="70" height="22" rx="8" fill="#2563eb"/>
+  <rect x="256" y="258" width="70" height="22" rx="8" fill="#eef2ff"/>
+
+  <!-- floating colour palette (themes) -->
+  <g>
+    <rect x="372" y="252" width="116" height="76" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+    <circle cx="396" cy="278" r="11" fill="#2563eb"/>
+    <circle cx="424" cy="278" r="11" fill="#8b5cf6"/>
+    <circle cx="452" cy="278" r="11" fill="#10b981"/>
+    <circle cx="396" cy="306" r="11" fill="#f59e0b"/>
+    <circle cx="424" cy="306" r="11" fill="#ef4444"/>
+    <circle cx="452" cy="306" r="11" fill="#0ea5e9"/>
+  </g>
+
+  <!-- little sparkle -->
+  <path d="M436 150l4 11 11 4-11 4-4 11-4-11-11-4 11-4z" fill="#ffc74c"/>
+</svg>

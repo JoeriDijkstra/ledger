@@ -780,6 +780,13 @@ button.danger:hover { filter: brightness(0.92); }
   font-weight: 600;
   color: var(--fg);
 }
+.page-head-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  min-width: 0;
+}
 .page-head .actions { display: flex; gap: 0.5rem; }
 
 @media (max-width: 640px) {
@@ -3136,13 +3143,53 @@ button.danger:hover { filter: brightness(0.92); }
   align-items: center;
   gap: 0.35rem;
 }
-.marketplace-thumb-empty {
-  display: flex;
+
+/* Compact in-line icon buttons in a card's footer (edit / install). */
+.card-icon-btn {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  flex-shrink: 0;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg-soft);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.card-icon-btn svg { width: 1.1rem; height: 1.1rem; }
+.card-icon-btn:hover {
+  background: var(--bg-soft);
+  border-color: var(--rule-strong);
+  color: var(--fg);
+  text-decoration: none;
+}
+.card-icon-btn.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.card-icon-btn.is-primary:hover {
+  filter: brightness(1.05);
+  color: #fff;
+}
+.card-icon-btn.is-installed {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+.card-icon-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.marketplace-thumb-placeholder {
+  width: 100%;
   height: 100%;
-  color: var(--muted);
-  font-size: 0.85rem;
+  object-fit: cover;
+  display: block;
 }
 .marketplace-card-meta {
   display: flex;
@@ -3654,3 +3701,82 @@ button.danger:hover { filter: brightness(0.92); }
 .settings-list-drag svg { width: 1rem; height: 1rem; }
 .settings-list-fields { flex: 1; }
 .settings-list-remove { align-self: flex-start; }
+
+/* Install/Installed action on a browse card, in a site's install context. */
+.marketplace-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* "Upload theme" tile in the My themes grid — matches a card's footprint. */
+.marketplace-card-add {
+  width: 100%;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 12rem;
+  border-style: dashed;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  box-shadow: none;
+}
+.marketplace-card-add:hover {
+  color: var(--fg);
+  border-color: var(--rule-strong);
+}
+.marketplace-card-add-icon { font-size: 1.6rem; line-height: 1; }
+.marketplace-card-add-label { font-size: 0.9rem; font-weight: 500; }
+
+/* Site picker modal — a stack of full-width site buttons (install target). */
+.site-picker-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.site-picker-list .btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Banner shown when the marketplace is opened in a site's install context. */
+.marketplace-context-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+/* ---- Theme manage page ---- */
+.manage-description-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  resize: vertical;
+}
+.manage-description-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.manage-upload-submit { margin-top: 0.9rem; }
