@@ -125,9 +125,9 @@ defmodule Masthead.Actions do
 
   @doc """
   Reminder-eligible actions: still pending, of a remindable type, created more
-  than `older_than_days` ago, never reminded, on an active site whose owner is
-  confirmed, active, and hasn't opted out. Returns actions with `:site` and the
-  site's `:owner` preloaded.
+  than `older_than_days` ago, never reminded, on an active site. Returns
+  actions with `:site` and the site's `:members` preloaded — the worker picks
+  the eligible members (confirmed, active, opted-in) to email.
   """
   def due_reminders(older_than_days \\ 7) do
     cutoff =
@@ -140,14 +140,11 @@ defmodule Masthead.Actions do
     Repo.all(
       from a in Action,
         join: s in assoc(a, :site),
-        join: u in assoc(s, :owner),
         where:
           a.status == "pending" and a.key in ^keys and
             a.inserted_at < ^cutoff and is_nil(a.reminded_at) and
-            is_nil(s.disabled_at) and is_nil(s.deleted_at) and
-            not is_nil(u.confirmed_at) and is_nil(u.disabled_at) and
-            u.wants_onboarding_emails == true,
-        preload: [site: {s, owner: u}]
+            is_nil(s.disabled_at) and is_nil(s.deleted_at),
+        preload: [site: {s, [:members]}]
     )
   end
 

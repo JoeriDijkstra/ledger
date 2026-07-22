@@ -13,6 +13,8 @@ defmodule Masthead.Accounts.User do
     field :admin, :boolean, default: false
 
     has_many :tokens, Masthead.Accounts.UserToken
+    has_many :memberships, Masthead.Sites.SiteMembership
+    has_many :sites, through: [:memberships, :site]
 
     timestamps(type: :utc_datetime)
   end
@@ -93,6 +95,18 @@ defmodule Masthead.Accounts.User do
     |> unsafe_validate_unique(:email, Masthead.Repo)
     |> unique_constraint(:email)
     |> hash_password()
+  end
+
+  @doc """
+  Registers a user who signed up by accepting a site invitation. Same as
+  `registration_changeset/2` (the user chooses a real password) but the
+  account starts confirmed — the invitation email already proved control of
+  the address, so no confirmation step (and no 7-day auto-disable) applies.
+  """
+  def invited_registration_changeset(user, attrs) do
+    user
+    |> registration_changeset(attrs)
+    |> put_change(:confirmed_at, now())
   end
 
   defp hash_password(changeset) do

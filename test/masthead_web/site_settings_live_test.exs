@@ -64,7 +64,7 @@ defmodule MastheadWeb.SiteSettingsLiveTest do
     # The row is retained (soft delete) but hidden from the owner's list and
     # no longer resolvable as their site.
     assert Sites.get_site!(site.id).deleted_at != nil
-    assert Sites.list_sites_for_user(site.owner_id) == []
+    assert Sites.list_sites_for_user(hd(Sites.list_members(site)).id) == []
   end
 
   test "the settings page links to the Hugo import page", %{conn: conn, site: site} do

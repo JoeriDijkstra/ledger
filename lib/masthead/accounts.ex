@@ -30,6 +30,16 @@ defmodule Masthead.Accounts do
     User.registration_changeset(user, attrs)
   end
 
+  @doc """
+  Registers a user who accepted a site invitation. The account starts
+  confirmed (the invite email proved control of the address).
+  """
+  def register_invited_user(attrs) do
+    %User{}
+    |> User.invited_registration_changeset(attrs)
+    |> Repo.insert()
+  end
+
   ## Email tokens
 
   @doc """

@@ -244,11 +244,11 @@ defmodule Masthead.Themes do
   @doc """
   Install a theme onto a site (from the marketplace, in a site's context).
   Idempotent — a repeat install is a no-op. A theme is installable when it
-  is published (`public`) or owned by the site's owner (so you can put your
-  own not-yet-published theme on your site).
+  is published (`public`) or owned by a member of the site (so you can put
+  your own not-yet-published theme on a site you belong to).
   """
   def install_theme(%Masthead.Sites.Site{} = site, %Theme{} = theme) do
-    if theme.public or theme.owner_id == site.owner_id do
+    if theme.public or Masthead.Sites.member?(site.id, theme.owner_id) do
       %ThemeInstall{}
       |> ThemeInstall.changeset(%{site_id: site.id, theme_id: theme.id})
       |> Repo.insert(on_conflict: :nothing)

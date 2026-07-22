@@ -30,6 +30,10 @@ defmodule MastheadWeb.Router do
     get "/signup", RegistrationController, :new
     post "/signup", RegistrationController, :create
 
+    # Site-invitation signup for an address without an account yet.
+    get "/invite/:token", InvitationController, :new
+    post "/invite/:token", InvitationController, :create
+
     get "/confirm/:token", ConfirmationController, :confirm
     post "/confirm", ConfirmationController, :create
 
@@ -92,6 +96,7 @@ defmodule MastheadWeb.Router do
       live "/:site_slug/theme", AdminLive.SiteTheme, :edit
       live "/:site_slug/checklist", AdminLive.Checklist, :index
       live "/:site_slug/domain", AdminLive.DomainSetup, :show
+      live "/:site_slug/users", AdminLive.SiteUsers, :index
 
       live "/:site_slug/posts", AdminLive.PostIndex, :index
       live "/:site_slug/posts/new", AdminLive.PostForm, :new

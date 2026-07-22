@@ -2216,6 +2216,7 @@ button.danger:hover { filter: brightness(0.92); }
   font-weight: 500;
 }
 .dialog-form input[type="text"],
+.dialog-form input[type="email"],
 .dialog-form textarea {
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--rule);
@@ -2227,6 +2228,7 @@ button.danger:hover { filter: brightness(0.92); }
   color: var(--fg);
 }
 .dialog-form input[type="text"]:focus,
+.dialog-form input[type="email"]:focus,
 .dialog-form textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
@@ -2249,13 +2251,15 @@ button.danger:hover { filter: brightness(0.92); }
    runs over the footer and the dialog's rounded bottom corners. The fields
    go in .dialog-scroll (the only scroller); the footer sits flush beneath
    it, so no negative-margin bleed is needed. */
-#new-site-form {
+#new-site-form,
+#invite-user-form {
   padding: 0;
   gap: 0;
   overflow: hidden;
   min-height: 0;
 }
-#new-site-form .dialog-scroll {
+#new-site-form .dialog-scroll,
+#invite-user-form .dialog-scroll {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -2263,7 +2267,8 @@ button.danger:hover { filter: brightness(0.92); }
   overflow-y: auto;
   min-height: 0;
 }
-#new-site-form .dialog-footer { margin: 0; }
+#new-site-form .dialog-footer,
+#invite-user-form .dialog-footer { margin: 0; }
 .section-heading { margin-top: 2.5rem; }
 
 .upload-grid {
@@ -3058,6 +3063,9 @@ button.danger:hover { filter: brightness(0.92); }
   white-space: nowrap;
 }
 .chip-neutral { background: var(--rule); color: var(--fg-soft, #525252); }
+/* "You" tag beside the current member's email — nudge right of the email and
+   optically center it against the text. */
+.chip-you { margin-left: 0.55rem; vertical-align: middle; position: relative; top: -1px; }
 .chip-accent { background: var(--accent-soft); color: var(--accent-strong); }
 /* Marketplace status: blue "Verified" vs. yellow "Community". */
 /* Green chip for a verified marketplace theme. */

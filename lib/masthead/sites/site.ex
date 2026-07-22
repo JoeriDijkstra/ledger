@@ -17,27 +17,29 @@ defmodule Masthead.Sites.Site do
     field :custom_domain_verified_at, :utc_datetime
     field :custom_domain_last_checked_at, :utc_datetime
     field :custom_domain_last_error, :string
-    # Set/cleared by the owning account's disable cascade
-    # (Masthead.Accounts.disable_user/1). Non-null => the site does not
-    # resolve publicly (Subdomain plug 404s).
+    # Set/cleared by a member account's disable cascade
+    # (Masthead.Accounts.disable_user/1), but only for single-member sites.
+    # Non-null => the site does not resolve publicly (Subdomain plug 404s).
     field :disabled_at, :utc_datetime
     # Admin soft-delete (distinct from `disabled_at`): hides the site from
-    # its owner and the public, but the row is retained for recovery.
+    # its members and the public, but the row is retained for recovery.
     field :deleted_at, :utc_datetime
-    belongs_to :owner, Masthead.Accounts.User
     belongs_to :theme_ref, Masthead.Themes.Theme, foreign_key: :theme_id
     belongs_to :homepage_page, Masthead.Content.Page, foreign_key: :homepage_page_id
     has_many :posts, Masthead.Content.Post
     has_many :pages, Masthead.Content.Page
     has_many :tags, Masthead.Content.Tag
+    has_many :memberships, Masthead.Sites.SiteMembership
+    has_many :members, through: [:memberships, :user]
+    has_many :invitations, Masthead.Sites.SiteInvitation
     timestamps(type: :utc_datetime)
   end
 
   def create_changeset(site, attrs) do
     site
-    |> cast(attrs, [:slug, :name, :title, :description, :theme_id, :owner_id])
+    |> cast(attrs, [:slug, :name, :title, :description, :theme_id])
     |> normalize_slug()
-    |> validate_required([:slug, :name, :owner_id])
+    |> validate_required([:slug, :name])
     |> validate_format(:slug, ~r/^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/,
       message: "must be 1-32 chars, lowercase letters/digits/hyphens, no leading/trailing hyphen"
     )
@@ -46,7 +48,6 @@ defmodule Masthead.Sites.Site do
     |> validate_length(:title, max: 200)
     |> validate_length(:description, max: 1000)
     |> unique_constraint(:slug)
-    |> assoc_constraint(:owner)
   end
 
   def settings_changeset(site, attrs) do

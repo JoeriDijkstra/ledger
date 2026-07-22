@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="420" viewBox="0 0 600 420">
+  <defs>
+    <linearGradient id="ig" x1="300" y1="40" x2="300" y2="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="gray" stop-opacity=".22"/>
+      <stop offset=".55" stop-color="gray" stop-opacity=".12"/>
+      <stop offset="1" stop-color="gray" stop-opacity=".08"/>
+    </linearGradient>
+  </defs>
+  <path d="M84 268c-22 12-40 36-33 62 7 26 40 38 66 35 22-3 42-13 64-13 24 0 46 14 70 14 28 0 52-18 80-22 32-4 64 8 96 8 24 0 48-8 63-26 15-18 12-46-4-62-22-22-58-16-86-6-18 6-36 14-54 8-18-6-30-22-46-30-26-12-58-6-82 6-26 12-45 33-71 30-22-2-47-9-67 6Z" fill="#2563eb" opacity=".15"/>
+
+  <!-- envelope -->
+  <rect x="168" y="128" width="264" height="180" rx="14" fill="url(#ig)"/>
+  <rect x="172" y="132" width="256" height="172" rx="12" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- envelope flap -->
+  <path d="M172 150l128 92 128-92" fill="none" stroke="#2563eb" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity=".9"/>
+  <path d="M172 150l128 92 128-92v-6a12 12 0 0 0-12-12H184a12 12 0 0 0-12 12z" fill="#2563eb" opacity=".12"/>
+
+  <!-- content lines peeking below the flap -->
+  <rect x="204" y="254" width="150" height="9" rx="4" fill="#2563eb" opacity=".25"/>
+  <rect x="204" y="272" width="110" height="6" rx="3" fill="#cbd5e1"/>
+
+  <!-- invite badge: avatar + plus -->
+  <g>
+    <circle cx="398" cy="266" r="42" fill="#ffffff" stroke="#e5e7eb"/>
+    <circle cx="398" cy="252" r="14" fill="#2563eb"/>
+    <path d="M374 288a24 24 0 0 1 48 0z" fill="#2563eb" opacity=".85"/>
+    <circle cx="432" cy="238" r="15" fill="#10b981"/>
+    <path d="M432 231v14M425 238h14" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  </g>
+
+  <!-- little sparkle -->
+  <path d="M198 118l4 11 11 4-11 4-4 11-4-11-11-4 11-4z" fill="#ffc74c"/>
+</svg>

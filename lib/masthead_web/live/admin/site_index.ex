@@ -60,12 +60,9 @@ defmodule MastheadWeb.AdminLive.SiteIndex do
   end
 
   def handle_event("save", %{"site" => params}, socket) do
-    params =
-      params
-      |> Map.put("owner_id", socket.assigns.current_user.id)
-      |> Map.put("title", params["name"])
+    params = Map.put(params, "title", params["name"])
 
-    case Sites.create_site(params) do
+    case Sites.create_site(params, socket.assigns.current_user) do
       {:ok, site} ->
         {:noreply, push_navigate(socket, to: ~p"/#{site.slug}")}
 

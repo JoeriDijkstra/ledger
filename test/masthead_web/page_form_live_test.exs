@@ -315,7 +315,7 @@ defmodule MastheadWeb.PageFormLiveTest do
     entries = Enum.map(files, fn {n, b} -> {String.to_charlist(n), b} end)
     {:ok, _} = :zip.create(String.to_charlist(tmp), entries)
 
-    {:ok, theme} = Masthead.Themes.Package.install(tmp, site.owner_id)
+    {:ok, theme} = Masthead.Themes.Package.install(tmp, hd(Sites.list_members(site)).id)
     File.rm(tmp)
     {:ok, _} = Sites.update_settings(site, %{"theme_id" => theme.id})
     Sites.get_site!(site.id)

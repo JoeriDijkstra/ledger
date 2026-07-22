@@ -88,7 +88,7 @@ defmodule MastheadWeb.SiteThemeLiveTest do
   # Install an uploaded theme zip and make it available on the site, so the
   # site's theme picker (Default + installed) can select it.
   defp install_theme_onto(site, zip) do
-    {:ok, theme} = Masthead.Themes.Package.install(zip, site.owner_id)
+    {:ok, theme} = Masthead.Themes.Package.install(zip, hd(Sites.list_members(site)).id)
     File.rm(zip)
     {:ok, _} = Themes.install_theme(site, theme)
     theme
