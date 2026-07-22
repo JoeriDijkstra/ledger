@@ -3,11 +3,14 @@ defmodule MastheadWeb.AdminLive.PostForm do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
-  alias Masthead.Content
+  alias Masthead.{Content, Realtime}
   alias Masthead.Content.Post
 
   @impl true
   def mount(params, _session, socket) do
+    if connected?(socket),
+      do: Realtime.subscribe(Realtime.content_topic(socket.assigns.site.id))
+
     {post, draft, page_title, step} =
       case socket.assigns.live_action do
         :new ->
@@ -35,6 +38,7 @@ defmodule MastheadWeb.AdminLive.PostForm do
        page_title: page_title,
        slug_touched: post != nil,
        show_errors: false,
+       external_change: nil,
        tags: Content.list_tags(socket.assigns.site.id)
      )
      |> maybe_allow_import()
@@ -271,6 +275,9 @@ defmodule MastheadWeb.AdminLive.PostForm do
     end
   end
 
+  def handle_event("dismiss_external_change", _params, socket),
+    do: {:noreply, assign(socket, external_change: nil)}
+
   # ---- Editor tools (sidebar) ----
 
   def handle_event("format_body", _params, socket) do
@@ -295,6 +302,33 @@ defmodule MastheadWeb.AdminLive.PostForm do
   end
 
   def handle_info({:file_picked, _other, _ctx}, socket), do: {:noreply, socket}
+
+  # Someone else changed or deleted the post being edited. The updated_at
+  # compare filters out this editor's own save (whose @post already carries
+  # the new timestamp).
+  def handle_info({:realtime, :content, %{kind: :post, id: id} = meta}, socket) do
+    {:noreply, note_external_change(socket, id, meta)}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp note_external_change(socket, id, %{op: op, updated_at: updated_at}) do
+    post = socket.assigns.post
+
+    cond do
+      is_nil(post) or post.id != id ->
+        socket
+
+      op == :deleted ->
+        assign(socket, external_change: :deleted)
+
+      op == :updated and updated_at != post.updated_at ->
+        assign(socket, external_change: :updated)
+
+      true ->
+        socket
+    end
+  end
 
   defp image_snippet(upload, "html"),
     do: ~s(<img src="#{Masthead.Uploads.url(upload)}" alt="#{image_alt(upload)}" />)
@@ -357,12 +391,19 @@ defmodule MastheadWeb.AdminLive.PostForm do
       title={@page_title}
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:posts}
     >
       <:actions>
         <.publish_status :if={@post} published={@post.published} />
       </:actions>
+
+      <.external_change_banner
+        change={@external_change}
+        reload_to={@post && ~p"/#{@site.slug}/posts/#{@post.id}/edit"}
+      />
 
       <div class="wizard" id="post-wizard" phx-hook="SaveShortcut" data-save-param="post">
         <%= case @step do %>

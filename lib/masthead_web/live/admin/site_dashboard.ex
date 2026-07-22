@@ -3,22 +3,35 @@ defmodule MastheadWeb.AdminLive.SiteDashboard do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
-  alias Masthead.{Actions, Content}
+  alias Masthead.{Actions, Content, Realtime}
 
   @impl true
   def mount(_params, _session, socket) do
     site = socket.assigns.site
-    posts = Content.list_posts(site.id)
-    pages = Content.list_pages(site.id)
 
-    {:ok,
-     assign(socket,
-       posts: posts,
-       pages: pages,
-       top_action: Actions.top_action(site),
-       page_title: site.name
-     )}
+    if connected?(socket) do
+      Realtime.subscribe(Realtime.content_topic(site.id))
+      Realtime.subscribe(Realtime.settings_topic(site.id))
+    end
+
+    {:ok, load(socket)}
   end
+
+  defp load(socket) do
+    site = socket.assigns.site
+
+    assign(socket,
+      posts: Content.list_posts(site.id),
+      pages: Content.list_pages(site.id),
+      top_action: Actions.top_action(site),
+      page_title: site.name
+    )
+  end
+
+  @impl true
+  def handle_info({:realtime, :content, _meta}, socket), do: {:noreply, load(socket)}
+  def handle_info({:realtime, :settings}, socket), do: {:noreply, load(socket)}
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def render(assigns) do
@@ -27,6 +40,8 @@ defmodule MastheadWeb.AdminLive.SiteDashboard do
       title={@site.name}
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:overview}
     >

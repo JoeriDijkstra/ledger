@@ -90,9 +90,20 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
   end
 
   @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
-    <.shell title="Uploads" site={@site} current_user={@current_user} flash={@flash} active={:uploads}>
+    <.shell
+      title="Uploads"
+      site={@site}
+      current_user={@current_user}
+      flash={@flash}
+      active={:uploads}
+      action_count={@action_count}
+      present_users={@present_users}
+    >
       <:actions>
         <button
           type="button"

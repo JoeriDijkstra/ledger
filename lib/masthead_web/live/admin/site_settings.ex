@@ -3,12 +3,13 @@ defmodule MastheadWeb.AdminLive.SiteSettings do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
-  alias Masthead.{Actions, Sites, Content}
+  alias Masthead.{Actions, Realtime, Sites, Content}
   alias Masthead.Content.Tag
 
   @impl true
   def mount(_params, _session, socket) do
     site = socket.assigns.site
+    if connected?(socket), do: Realtime.subscribe(Realtime.settings_topic(site.id))
     changeset = Sites.change_settings(site)
 
     {:ok,
@@ -26,6 +27,22 @@ defmodule MastheadWeb.AdminLive.SiteSettings do
      )
      |> assign_form(changeset)}
   end
+
+  # A settings/tag change elsewhere: refresh the ancillary collaborative data
+  # (tag list + homepage options) without touching the form, so a viewer's
+  # unsaved edits are never clobbered.
+  @impl true
+  def handle_info({:realtime, :settings}, socket) do
+    site = socket.assigns.site
+
+    {:noreply,
+     assign(socket,
+       tags: Content.list_tags(site.id),
+       published_pages: Content.list_published_pages(site.id)
+     )}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("validate", %{"site" => params}, socket) do
@@ -172,6 +189,7 @@ defmodule MastheadWeb.AdminLive.SiteSettings do
       flash={@flash}
       active={:settings}
       action_count={@action_count}
+      present_users={@present_users}
     >
       <div class="wizard">
         <.form

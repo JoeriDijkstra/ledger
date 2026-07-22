@@ -7,8 +7,32 @@ defmodule Masthead.Content do
   alone, on purpose.
   """
   import Ecto.Query
+  alias Masthead.Realtime
   alias Masthead.Repo
   alias Masthead.Content.{Post, Page, Tag}
+
+  # Announce a post/page mutation so index/dashboard views reload and open
+  # editors can detect an external change. Pass-through on the result tuple.
+  defp broadcast_content({:ok, record} = result, kind, op) do
+    Realtime.content_changed(record.site_id, %{
+      kind: kind,
+      id: record.id,
+      op: op,
+      updated_at: record.updated_at
+    })
+
+    result
+  end
+
+  defp broadcast_content(other, _kind, _op), do: other
+
+  # Tag edits render on the settings page, so they ride the settings topic.
+  defp broadcast_settings({:ok, %{site_id: site_id}} = result) do
+    Realtime.settings_changed(site_id)
+    result
+  end
+
+  defp broadcast_settings(other), do: other
 
   # ---- Posts ----
 
@@ -154,7 +178,7 @@ defmodule Masthead.Content do
     with {:ok, post} <- Repo.insert(changeset) do
       Masthead.Actions.complete_action(site_id, "create_first_post")
       Masthead.Actions.reached_first_content(site_id)
-      {:ok, post}
+      broadcast_content({:ok, post}, :post, :created)
     end
   end
 
@@ -165,9 +189,10 @@ defmodule Masthead.Content do
     |> Post.changeset(attrs)
     |> put_post_tags(post.site_id, attrs)
     |> Repo.update()
+    |> broadcast_content(:post, :updated)
   end
 
-  def delete_post(%Post{} = post), do: Repo.delete(post)
+  def delete_post(%Post{} = post), do: post |> Repo.delete() |> broadcast_content(:post, :deleted)
 
   def change_post(%Post{} = post, attrs \\ %{}), do: Post.changeset(post, attrs)
 
@@ -267,7 +292,7 @@ defmodule Masthead.Content do
     with {:ok, page} <- Repo.insert(changeset) do
       Masthead.Actions.complete_action(site_id, "create_first_page")
       Masthead.Actions.reached_first_content(site_id)
-      {:ok, page}
+      broadcast_content({:ok, page}, :page, :created)
     end
   end
 
@@ -278,13 +303,14 @@ defmodule Masthead.Content do
     |> Page.changeset(attrs)
     |> put_page_filter_tags(page.site_id, attrs)
     |> Repo.update()
+    |> broadcast_content(:page, :updated)
   end
 
   defp put_page_filter_tags(changeset, site_id, attrs) do
     put_assoc_tags(changeset, :filter_tags, site_id, attrs, "filter_tag_ids", :filter_tag_ids)
   end
 
-  def delete_page(%Page{} = page), do: Repo.delete(page)
+  def delete_page(%Page{} = page), do: page |> Repo.delete() |> broadcast_content(:page, :deleted)
 
   def change_page(%Page{} = page, attrs \\ %{}), do: Page.changeset(page, attrs)
 
@@ -312,11 +338,13 @@ defmodule Masthead.Content do
     %Tag{site_id: site_id}
     |> Tag.changeset(Map.put(attrs, "site_id", site_id))
     |> Repo.insert()
+    |> broadcast_settings()
   end
 
-  def update_tag(%Tag{} = tag, attrs), do: tag |> Tag.changeset(attrs) |> Repo.update()
+  def update_tag(%Tag{} = tag, attrs),
+    do: tag |> Tag.changeset(attrs) |> Repo.update() |> broadcast_settings()
 
-  def delete_tag(%Tag{} = tag), do: Repo.delete(tag)
+  def delete_tag(%Tag{} = tag), do: tag |> Repo.delete() |> broadcast_settings()
 
   def change_tag(%Tag{} = tag, attrs \\ %{}), do: Tag.changeset(tag, attrs)
 

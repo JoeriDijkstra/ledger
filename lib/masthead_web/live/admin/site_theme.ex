@@ -153,6 +153,7 @@ defmodule MastheadWeb.AdminLive.SiteTheme do
   end
 
   def handle_info({:file_picked, _upload, _ctx}, socket), do: {:noreply, socket}
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   defp upload_value(nil), do: ""
   defp upload_value(upload), do: to_string(upload.id)
@@ -243,6 +244,7 @@ defmodule MastheadWeb.AdminLive.SiteTheme do
       flash={@flash}
       active={:theme}
       action_count={@action_count}
+      present_users={@present_users}
     >
       <div class="wizard">
         <.form

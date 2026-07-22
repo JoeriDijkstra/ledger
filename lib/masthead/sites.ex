@@ -1,5 +1,6 @@
 defmodule Masthead.Sites do
   import Ecto.Query
+  alias Masthead.Realtime
   alias Masthead.Repo
   alias Masthead.Accounts
   alias Masthead.Accounts.User
@@ -112,7 +113,16 @@ defmodule Masthead.Sites do
   def enable_site(%Site{} = site), do: set_site_timestamp(site, :disabled_at, nil)
 
   @doc "Soft-deletes a site (hidden from owner + public; retained for recovery)."
-  def soft_delete_site(%Site{} = site), do: set_site_timestamp(site, :deleted_at, truncated_now())
+  def soft_delete_site(%Site{} = site) do
+    case set_site_timestamp(site, :deleted_at, truncated_now()) do
+      {:ok, _} = result ->
+        Realtime.site_gone(site.id)
+        result
+
+      other ->
+        other
+    end
+  end
 
   @doc "Restores a soft-deleted site."
   def restore_site(%Site{} = site), do: set_site_timestamp(site, :deleted_at, nil)
@@ -226,6 +236,14 @@ defmodule Masthead.Sites do
     %SiteMembership{}
     |> SiteMembership.changeset(%{site_id: site.id, user_id: user.id})
     |> Repo.insert(on_conflict: :nothing, conflict_target: [:site_id, :user_id])
+    |> case do
+      {:ok, _} = result ->
+        Realtime.members_changed(site.id)
+        result
+
+      other ->
+        other
+    end
   end
 
   @doc """
@@ -241,7 +259,13 @@ defmodule Masthead.Sites do
           from m in SiteMembership, where: m.site_id == ^site.id and m.user_id == ^user.id
         )
 
-      if n > 0, do: :ok, else: {:error, :not_member}
+      if n > 0 do
+        Realtime.members_changed(site.id)
+        Realtime.access_revoked(user.id, site.id)
+        :ok
+      else
+        {:error, :not_member}
+      end
     end
   end
 
@@ -283,6 +307,7 @@ defmodule Masthead.Sites do
 
         {:ok, _} = Repo.insert(invitation)
         UserNotifier.deliver_site_invitation(email, site, url_fun.(raw))
+        Realtime.members_changed(site.id)
         {:ok, :invited}
     end
   end
@@ -301,7 +326,16 @@ defmodule Masthead.Sites do
   end
 
   @doc "Cancels a pending invitation."
-  def delete_invitation(%SiteInvitation{} = invitation), do: Repo.delete(invitation)
+  def delete_invitation(%SiteInvitation{} = invitation) do
+    case Repo.delete(invitation) do
+      {:ok, _} = result ->
+        Realtime.members_changed(invitation.site_id)
+        result
+
+      other ->
+        other
+    end
+  end
 
   @doc """
   Consumes `invitation` for a now-registered `user`: creates the membership
@@ -327,8 +361,12 @@ defmodule Masthead.Sites do
     )
     |> Repo.transaction()
     |> case do
-      {:ok, _} -> {:ok, invitation.site_id}
-      {:error, _, reason, _} -> {:error, reason}
+      {:ok, _} ->
+        Realtime.members_changed(invitation.site_id)
+        {:ok, invitation.site_id}
+
+      {:error, _, reason, _} ->
+        {:error, reason}
     end
   end
 
@@ -373,6 +411,7 @@ defmodule Masthead.Sites do
       unless blank?(site.description),
         do: Masthead.Actions.complete_action(site, "set_description")
 
+      Realtime.settings_changed(site.id)
       {:ok, site}
     end
   end

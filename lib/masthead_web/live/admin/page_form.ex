@@ -5,7 +5,7 @@ defmodule MastheadWeb.AdminLive.PageForm do
   import MastheadWeb.AdminLive.Components
   import MastheadWeb.AdminLive.SettingsFields, only: [settings_fields: 1]
 
-  alias Masthead.{Content, Themes, Uploads}
+  alias Masthead.{Content, Realtime, Themes, Uploads}
   alias Masthead.Content.Page
   alias MastheadWeb.AdminLive.SettingsFields
 
@@ -17,6 +17,9 @@ defmodule MastheadWeb.AdminLive.PageForm do
 
   @impl true
   def mount(params, _session, socket) do
+    if connected?(socket),
+      do: Realtime.subscribe(Realtime.content_topic(socket.assigns.site.id))
+
     {page, draft, page_title, step} =
       case socket.assigns.live_action do
         :new ->
@@ -56,6 +59,7 @@ defmodule MastheadWeb.AdminLive.PageForm do
        page_title: page_title,
        slug_touched: page != nil,
        show_errors: false,
+       external_change: nil,
        theme_manifest: theme_manifest,
        metadata_fields: metadata_fields,
        has_metadata?: has_metadata?,
@@ -474,6 +478,9 @@ defmodule MastheadWeb.AdminLive.PageForm do
     end
   end
 
+  def handle_event("dismiss_external_change", _params, socket),
+    do: {:noreply, assign(socket, external_change: nil)}
+
   # ---- Editor tools (sidebar) ----
 
   def handle_event("format_body", _params, socket) do
@@ -524,6 +531,32 @@ defmodule MastheadWeb.AdminLive.PageForm do
   end
 
   def handle_info({:file_picked, _other, _ctx}, socket), do: {:noreply, socket}
+
+  # Someone else changed or deleted the page being edited (updated_at compare
+  # ignores this editor's own save).
+  def handle_info({:realtime, :content, %{kind: :page, id: id} = meta}, socket) do
+    {:noreply, note_external_change(socket, id, meta)}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  defp note_external_change(socket, id, %{op: op, updated_at: updated_at}) do
+    page = socket.assigns.page
+
+    cond do
+      is_nil(page) or page.id != id ->
+        socket
+
+      op == :deleted ->
+        assign(socket, external_change: :deleted)
+
+      op == :updated and updated_at != page.updated_at ->
+        assign(socket, external_change: :updated)
+
+      true ->
+        socket
+    end
+  end
 
   defp editor_dom_id(format), do: "page-body-editor-" <> format
 
@@ -640,12 +673,19 @@ defmodule MastheadWeb.AdminLive.PageForm do
       title={@page_title}
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:pages}
     >
       <:actions>
         <.publish_status :if={@page} published={@page.published} />
       </:actions>
+
+      <.external_change_banner
+        change={@external_change}
+        reload_to={@page && ~p"/#{@site.slug}/pages/#{@page.id}/edit"}
+      />
 
       <div class="wizard" id="page-wizard" phx-hook="SaveShortcut" data-save-param="page">
         <%= case @step do %>
