@@ -24,6 +24,10 @@ defmodule MastheadWeb.AdminLive.Components do
         "LiveViews that mutate actions in-page (so the badge stays live); otherwise " <>
         "it is computed from the site."
 
+  attr :present_users, :list,
+    default: [],
+    doc: "Other members currently viewing this site (from Presence via the :load_site hook)."
+
   slot :inner_block, required: true
   slot :actions
   slot :title_meta
@@ -199,12 +203,18 @@ defmodule MastheadWeb.AdminLive.Components do
           </div>
         </div>
 
-        <div :if={@title || @actions != [] || @title_meta != []} class="page-head">
+        <div
+          :if={@title || @actions != [] || @title_meta != [] || @present_users != []}
+          class="page-head"
+        >
           <div class="page-head-title">
             <h1 :if={@title}>{@title}</h1>
             {render_slot(@title_meta)}
+            <.presence_cluster :if={@present_users != []} users={@present_users} />
           </div>
-          <div class="actions">{render_slot(@actions)}</div>
+          <div class="actions">
+            {render_slot(@actions)}
+          </div>
         </div>
 
         {render_slot(@inner_block)}
@@ -229,6 +239,36 @@ defmodule MastheadWeb.AdminLive.Components do
       <.link href={~p"/confirm"} method="post" class="account-banner-btn">
         Resend confirmation
       </.link>
+    </div>
+    """
+  end
+
+  attr :change, :atom, default: nil, doc: ":updated | :deleted | nil"
+  attr :reload_to, :string, default: nil
+
+  @doc """
+  Banner shown in a post/page editor when someone else changed or deleted the
+  record being edited. `phx-click=\"dismiss_external_change\"` is handled by
+  the editor LiveView.
+  """
+  def external_change_banner(assigns) do
+    ~H"""
+    <div :if={@change} class="account-banner" role="alert">
+      <p :if={@change == :updated}>
+        Someone else changed this while you had it open. <.link
+          :if={@reload_to}
+          navigate={@reload_to}
+          class="account-banner-link"
+        >
+          Reload to see the latest
+        </.link>.
+      </p>
+      <p :if={@change == :deleted}>
+        Someone else deleted this. Your changes can no longer be saved here.
+      </p>
+      <button type="button" phx-click="dismiss_external_change" class="account-banner-btn">
+        Dismiss
+      </button>
     </div>
     """
   end
@@ -707,6 +747,22 @@ defmodule MastheadWeb.AdminLive.Components do
   end
 
   defp user_initial(_), do: "?"
+
+  attr :users, :list, required: true
+
+  # Overlapping avatars of who else is viewing, shown right after the page
+  # title. Each avatar reveals the member's email in a popover on hover. Fed by
+  # `@present_users` (Presence), which the `:load_site` hook keeps current.
+  defp presence_cluster(assigns) do
+    ~H"""
+    <div class="presence-cluster" aria-label="Also viewing" phx-no-format>
+      <span :for={u <- @users} class="presence-avatar" tabindex="0">
+        {user_initial(u)}
+        <span class="presence-popover" role="tooltip">{u.email}</span>
+      </span>
+    </div>
+    """
+  end
 
   @doc false
   # Builds the public URL for a site based on `:masthead, :site_url`:

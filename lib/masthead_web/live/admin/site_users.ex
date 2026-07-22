@@ -4,11 +4,12 @@ defmodule MastheadWeb.AdminLive.SiteUsers do
 
   import MastheadWeb.AdminLive.Components
   alias Masthead.Accounts.User
-  alias Masthead.{Accounts, Actions, Sites}
+  alias Masthead.{Accounts, Actions, Realtime, Sites}
 
   @impl true
   def mount(_params, _session, socket) do
     site = socket.assigns.site
+    if connected?(socket), do: Realtime.subscribe(Realtime.members_topic(site.id))
 
     {:ok,
      assign(socket,
@@ -18,6 +19,10 @@ defmodule MastheadWeb.AdminLive.SiteUsers do
        email: ""
      )}
   end
+
+  @impl true
+  def handle_info({:realtime, :members}, socket), do: {:noreply, reload_people(socket)}
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -182,6 +187,7 @@ defmodule MastheadWeb.AdminLive.SiteUsers do
       flash={@flash}
       active={:users}
       action_count={@action_count}
+      present_users={@present_users}
     >
       <:actions>
         <button

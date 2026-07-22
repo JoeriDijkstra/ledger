@@ -12,6 +12,7 @@ defmodule Masthead.Actions do
   """
   import Ecto.Query
 
+  alias Masthead.Realtime
   alias Masthead.Repo
   alias Masthead.Sites.Site
   alias Masthead.Actions.{Action, Definitions}
@@ -32,9 +33,15 @@ defmodule Masthead.Actions do
         |> Action.changeset(attrs)
         |> Repo.insert(on_conflict: :nothing, conflict_target: [:site_id, :key])
         |> case do
-          {:ok, %Action{id: nil}} -> {:ok, :exists}
-          {:ok, action} -> {:ok, action}
-          other -> other
+          {:ok, %Action{id: nil}} ->
+            {:ok, :exists}
+
+          {:ok, action} ->
+            Realtime.actions_changed(site.id)
+            {:ok, action}
+
+          other ->
+            other
         end
     end
   end
@@ -56,6 +63,14 @@ defmodule Masthead.Actions do
     })
     |> Ecto.Changeset.validate_required([:title])
     |> Repo.insert()
+    |> case do
+      {:ok, action} ->
+        Realtime.actions_changed(site.id)
+        {:ok, action}
+
+      other ->
+        other
+    end
   end
 
   @doc """
@@ -81,12 +96,13 @@ defmodule Masthead.Actions do
   def complete_action(%Site{id: site_id}, key), do: complete_action(site_id, key)
 
   def complete_action(site_id, key) when is_integer(site_id) and is_binary(key) do
-    {_count, _} =
+    {count, _} =
       from(a in Action,
         where: a.site_id == ^site_id and a.key == ^key and a.status != "completed"
       )
       |> Repo.update_all(set: [status: "completed", updated_at: now()])
 
+    if count > 0, do: Realtime.actions_changed(site_id)
     :ok
   end
 
@@ -98,12 +114,13 @@ defmodule Masthead.Actions do
   def dismiss_action(%Site{id: site_id}, key), do: dismiss_action(site_id, key)
 
   def dismiss_action(site_id, key) when is_integer(site_id) and is_binary(key) do
-    {_count, _} =
+    {count, _} =
       from(a in Action,
         where: a.site_id == ^site_id and a.key == ^key and a.status == "pending"
       )
       |> Repo.update_all(set: [status: "dismissed", updated_at: now()])
 
+    if count > 0, do: Realtime.actions_changed(site_id)
     :ok
   end
 

@@ -13,6 +13,7 @@ defmodule Masthead.Application do
       {Oban, Application.fetch_env!(:masthead, Oban)},
       {DNSCluster, query: Application.get_env(:masthead, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Masthead.PubSub},
+      MastheadWeb.Presence,
       # Start a worker by calling: Masthead.Worker.start_link(arg)
       # {Masthead.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -94,12 +94,17 @@ defmodule MastheadWeb.AdminLive.UploadShow do
   end
 
   @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
     <.shell
       title={@upload.filename}
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:uploads}
     >

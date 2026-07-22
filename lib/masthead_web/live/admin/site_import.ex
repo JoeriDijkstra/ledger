@@ -78,12 +78,17 @@ defmodule MastheadWeb.AdminLive.SiteImport do
   defp problem_reason(other), do: to_string(other)
 
   @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
     <.shell
       title="Import site"
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:settings}
     >

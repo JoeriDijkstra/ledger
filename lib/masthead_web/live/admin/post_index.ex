@@ -3,13 +3,19 @@ defmodule MastheadWeb.AdminLive.PostIndex do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
-  alias Masthead.Content
+  alias Masthead.{Content, Realtime}
 
   @impl true
   def mount(_params, _session, socket) do
-    tags = Content.list_tags(socket.assigns.site.id)
-    {:ok, assign(socket, tags: tags, page_title: "Posts — #{socket.assigns.site.name}")}
+    site = socket.assigns.site
+    if connected?(socket), do: Realtime.subscribe(Realtime.content_topic(site.id))
+    tags = Content.list_tags(site.id)
+    {:ok, assign(socket, tags: tags, page_title: "Posts — #{site.name}")}
   end
+
+  @impl true
+  def handle_info({:realtime, :content, _meta}, socket), do: {:noreply, reload_posts(socket)}
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_params(params, _uri, socket) do
@@ -89,7 +95,15 @@ defmodule MastheadWeb.AdminLive.PostIndex do
   @impl true
   def render(assigns) do
     ~H"""
-    <.shell title="Posts" site={@site} current_user={@current_user} flash={@flash} active={:posts}>
+    <.shell
+      title="Posts"
+      site={@site}
+      current_user={@current_user}
+      flash={@flash}
+      active={:posts}
+      action_count={@action_count}
+      present_users={@present_users}
+    >
       <:actions>
         <.link navigate={~p"/#{@site.slug}/posts/import"} class="btn btn-add">
           <span class="btn-add-icon" aria-hidden="true">↑</span>
