@@ -15,14 +15,16 @@ alias Masthead.Content
 {:ok, site} =
   case Sites.get_site_by_slug("demo") do
     nil ->
-      Sites.create_site(%{
-        "slug" => "demo",
-        "name" => "Example Site",
-        "title" => "Example Site",
-        "description" =>
-          "A placeholder site seeded with Masthead. Use it to explore the platform — edit, publish, or delete anything.",
-        "owner_id" => user.id
-      })
+      Sites.create_site(
+        %{
+          "slug" => "demo",
+          "name" => "Example Site",
+          "title" => "Example Site",
+          "description" =>
+            "A placeholder site seeded with Masthead. Use it to explore the platform — edit, publish, or delete anything."
+        },
+        user
+      )
 
     existing ->
       {:ok, existing}

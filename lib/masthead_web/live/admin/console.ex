@@ -289,7 +289,7 @@ defmodule MastheadWeb.AdminLive.Console do
             <tr>
               <th>Name</th>
               <th>Slug</th>
-              <th>Owner</th>
+              <th>Members</th>
               <th>Created</th>
               <th>Status</th>
               <th>Add action</th>
@@ -300,7 +300,7 @@ defmodule MastheadWeb.AdminLive.Console do
             <tr :for={s <- @sites}>
               <td>{s.name}</td>
               <td class="muted">{s.slug}</td>
-              <td class="muted">{s.owner && s.owner.email}</td>
+              <td class="muted">{Enum.map_join(s.members, ", ", & &1.email)}</td>
               <td class="muted"><.relative_time at={s.inserted_at} /></td>
               <td>
                 <span :if={not is_nil(s.deleted_at)} class="pill pill-danger">deleted</span>

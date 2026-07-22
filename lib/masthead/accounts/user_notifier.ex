@@ -109,6 +109,56 @@ defmodule Masthead.Accounts.UserNotifier do
     deliver(to, "#{site_name} requires your attention", text, html)
   end
 
+  @doc "Notifies an existing user that they've been added to a site."
+  def deliver_site_added_notification(user, site, site_url) do
+    text = """
+    Hi,
+
+    You've been added to the site "#{site.name}" on Masthead. You can now
+    collaborate on it. Open it here:
+
+    #{site_url}
+    """
+
+    html =
+      layout([
+        paragraph(~s(You've been added to the site "#{site.name}" on Masthead.)),
+        paragraph("You can now collaborate on it."),
+        button("Open #{site.name}", site_url)
+      ])
+
+    deliver(user.email, ~s(You've been added to "#{site.name}"), text, html)
+  end
+
+  @doc """
+  Invites an address with no account yet to collaborate on a site. `url` is
+  the `/invite/:token` signup link.
+  """
+  def deliver_site_invitation(email, site, url) do
+    text = """
+    Hi,
+
+    You've been invited to collaborate on the site "#{site.name}" on Masthead.
+    Create your account to join:
+
+    #{url}
+
+    This link expires in 7 days. If you weren't expecting this invitation, you
+    can safely ignore this email.
+    """
+
+    html =
+      layout([
+        paragraph(~s(You've been invited to collaborate on the site "#{site.name}" on Masthead.)),
+        button("Accept invitation", url),
+        muted(
+          "This link expires in 7 days. If you weren't expecting this invitation, you can safely ignore this email."
+        )
+      ])
+
+    deliver(email, ~s(You're invited to collaborate on "#{site.name}"), text, html)
+  end
+
   # ---- delivery ----
 
   # Enqueue rather than send inline so a flaky provider retries.
