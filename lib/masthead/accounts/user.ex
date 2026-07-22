@@ -11,6 +11,8 @@ defmodule Masthead.Accounts.User do
     field :last_login_at, :utc_datetime
     field :wants_onboarding_emails, :boolean, default: true
     field :admin, :boolean, default: false
+    # Populated only by `Sites.list_members/1` (the member's site-join time).
+    field :joined_at, :utc_datetime, virtual: true
 
     has_many :tokens, Masthead.Accounts.UserToken
     has_many :memberships, Masthead.Sites.SiteMembership
