@@ -210,6 +210,7 @@ defmodule MastheadWeb.AdminLive.SiteUsers do
           <tr>
             <th>Email</th>
             <th>Status</th>
+            <th>Joined</th>
             <th class="actions-cell"></th>
           </tr>
         </thead>
@@ -224,6 +225,7 @@ defmodule MastheadWeb.AdminLive.SiteUsers do
                 {if User.confirmed?(m), do: "Active", else: "Unconfirmed"}
               </span>
             </td>
+            <td data-label="Joined"><.relative_time at={m.joined_at} /></td>
             <td class="actions-cell">
               <div class="row-actions">
                 <button

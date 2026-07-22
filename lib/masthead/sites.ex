@@ -206,7 +206,8 @@ defmodule Masthead.Sites do
         join: m in SiteMembership,
         on: m.user_id == u.id,
         where: m.site_id == ^site.id,
-        order_by: u.email
+        order_by: u.email,
+        select_merge: %{joined_at: m.inserted_at}
     )
   end
 
