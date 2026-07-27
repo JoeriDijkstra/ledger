@@ -658,6 +658,7 @@ code { font-family: ui-monospace, Menlo, monospace; font-size: 0.9em; background
   white-space: nowrap;
 }
 .account-banner-btn:hover { background: rgba(146, 64, 14, 0.08); }
+.account-banner-link { color: inherit; font-weight: 600; text-decoration: underline; }
 
 .auth-card section { margin-top: 1.75rem; }
 .auth-card section h2 { font-size: 1rem; margin-bottom: 0.5rem; }
@@ -763,19 +764,95 @@ button.danger:hover { filter: brightness(0.92); }
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
   position: relative;
-  overflow: hidden;
+  /* Not `overflow: hidden` — the presence popover needs to float outside the
+     card. The accent bar (::before) is rounded on its left corners instead so
+     it still respects the card's rounded corners. The z-index keeps the
+     floating popover above content below (stays under the sidebar/modals). */
+  z-index: 15;
 }
+/* "Who's viewing" overlapping avatars, shown right after the page title.
+   Each avatar reveals the member's email in a popover on hover/focus. */
+.presence-cluster {
+  display: inline-flex;
+  align-items: center;
+}
+.presence-cluster .presence-avatar {
+  position: relative;
+  /* Nudge down: flex centers on the line box, which sits above the title's
+     optical (cap-height) center. */
+  top: 2px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border: 2px solid var(--card);
+  margin-left: -8px;
+  box-shadow: var(--shadow-sm);
+  cursor: default;
+  transition: transform 0.12s ease;
+}
+.presence-cluster .presence-avatar:first-child {
+  margin-left: 0;
+}
+.presence-cluster .presence-avatar:hover,
+.presence-cluster .presence-avatar:focus-visible {
+  transform: translateY(-2px);
+  z-index: 3;
+  outline: none;
+}
+.presence-cluster .presence-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  background: var(--ink, #18181b);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 4;
+}
+.presence-cluster .presence-popover::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-bottom-color: var(--ink, #18181b);
+}
+.presence-cluster .presence-avatar:hover .presence-popover,
+.presence-cluster .presence-avatar:focus-visible .presence-popover {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .page-head::before {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
   background: linear-gradient(180deg, var(--accent), var(--violet));
+  border-radius: 14px 0 0 14px;
 }
 .page-head h1 {
   margin: 0;
   padding-left: 0.4rem;
   font-size: 1.55rem;
+  line-height: 1.1;
   letter-spacing: -0.025em;
   font-weight: 600;
   color: var(--fg);

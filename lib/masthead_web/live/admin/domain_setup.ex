@@ -103,12 +103,17 @@ defmodule MastheadWeb.AdminLive.DomainSetup do
   defp humanize_status(other), do: other
 
   @impl true
+  def handle_info(_message, socket), do: {:noreply, socket}
+
+  @impl true
   def render(assigns) do
     ~H"""
     <.shell
       title="Custom domain"
       site={@site}
       current_user={@current_user}
+      action_count={@action_count}
+      present_users={@present_users}
       flash={@flash}
       active={:settings}
     >

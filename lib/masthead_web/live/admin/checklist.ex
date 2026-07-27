@@ -21,6 +21,10 @@ defmodule MastheadWeb.AdminLive.Checklist do
     {:noreply, assign_actions(socket)}
   end
 
+  @impl true
+  def handle_info({:realtime, :actions}, socket), do: {:noreply, assign_actions(socket)}
+  def handle_info(_message, socket), do: {:noreply, socket}
+
   defp assign_actions(socket) do
     actions = Actions.list_pending(socket.assigns.site)
     assign(socket, actions: actions, action_count: length(actions))
@@ -36,6 +40,7 @@ defmodule MastheadWeb.AdminLive.Checklist do
       flash={@flash}
       active={:checklist}
       action_count={@action_count}
+      present_users={@present_users}
     >
       <div :if={@actions == []} class="empty-state empty-state-illustrated">
         <img

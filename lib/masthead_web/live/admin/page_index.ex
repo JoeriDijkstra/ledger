@@ -3,12 +3,17 @@ defmodule MastheadWeb.AdminLive.PageIndex do
   on_mount {MastheadWeb.AdminLive.Hooks, :load_site}
 
   import MastheadWeb.AdminLive.Components
-  alias Masthead.Content
+  alias Masthead.{Content, Realtime}
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket), do: Realtime.subscribe(Realtime.content_topic(socket.assigns.site.id))
     {:ok, load(socket)}
   end
+
+  @impl true
+  def handle_info({:realtime, :content, _meta}, socket), do: {:noreply, load(socket)}
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_event("delete", %{"id" => id}, socket) do
@@ -38,7 +43,15 @@ defmodule MastheadWeb.AdminLive.PageIndex do
   @impl true
   def render(assigns) do
     ~H"""
-    <.shell title="Pages" site={@site} current_user={@current_user} flash={@flash} active={:pages}>
+    <.shell
+      title="Pages"
+      site={@site}
+      current_user={@current_user}
+      flash={@flash}
+      active={:pages}
+      action_count={@action_count}
+      present_users={@present_users}
+    >
       <:actions>
         <.link navigate={~p"/#{@site.slug}/pages/import"} class="btn btn-add">
           <span class="btn-add-icon" aria-hidden="true">↑</span>
