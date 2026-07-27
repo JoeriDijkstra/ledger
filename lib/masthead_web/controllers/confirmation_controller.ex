@@ -7,7 +7,9 @@ defmodule MastheadWeb.ConfirmationController do
   # GET /confirm/:token — the link from the email. Works logged-in or out.
   def confirm(conn, %{"token" => token}) do
     case Accounts.confirm_user(token) do
-      {:ok, _user} ->
+      {:ok, user} ->
+        Accounts.deliver_welcome(user, url(~p"/sites"))
+
         conn
         |> put_flash(:info, "Thanks — your email is confirmed.")
         |> redirect(to: post_confirm_path(conn))
@@ -38,10 +40,21 @@ defmodule MastheadWeb.ConfirmationController do
 
     conn
     |> put_flash(:info, "If your email isn't confirmed yet, a new link is on its way.")
-    |> redirect(to: post_confirm_path(conn))
+    |> redirect(to: resend_path(conn))
   end
 
+  # After a confirm attempt: logged-in users go to their sites, else the login
+  # page. (A user who just confirmed is no longer suspended, so `/sites` loads.)
   defp post_confirm_path(conn) do
     if conn.assigns[:current_user], do: ~p"/sites", else: ~p"/login"
+  end
+
+  # After a resend, keep a still-suspended user on the verify screen so the
+  # "new link is on its way" flash is shown rather than lost to a bounce.
+  defp resend_path(conn) do
+    case conn.assigns[:current_user] do
+      %User{suspended_at: at} when not is_nil(at) -> ~p"/verify"
+      _ -> post_confirm_path(conn)
+    end
   end
 end

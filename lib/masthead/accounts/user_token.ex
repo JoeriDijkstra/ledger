@@ -7,7 +7,7 @@ defmodule Masthead.Accounts.UserToken do
   a leaked database row can't be replayed as a valid link.
 
   Contexts and validity windows:
-    * `"confirm"`        — 7 days
+    * `"confirm"`        — 30 days (matches the unconfirmed-account window)
     * `"reset_password"` — 1 day
   """
   use Ecto.Schema
@@ -19,7 +19,7 @@ defmodule Masthead.Accounts.UserToken do
   @hash_algorithm :sha256
   @rand_size 32
 
-  @confirm_validity_days 7
+  @confirm_validity_days 30
   @reset_password_validity_days 1
 
   schema "users_tokens" do

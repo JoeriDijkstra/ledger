@@ -14,6 +14,10 @@ defmodule Masthead.AccountsDisableTest do
         "password" => "password1234"
       })
 
+    # Verified so the disable cascade (which only fires on losing a *verified*
+    # member) takes the owner's solo site offline.
+    {:ok, user} = Accounts.confirm_user(Accounts.generate_email_token(user, "confirm"))
+
     {:ok, site} =
       Sites.create_site(%{
         "slug" => "dis#{System.unique_integer([:positive])}",

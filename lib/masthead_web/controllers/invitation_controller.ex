@@ -37,6 +37,7 @@ defmodule MastheadWeb.InvitationController do
         case Accounts.register_invited_user(attrs) do
           {:ok, user} ->
             {:ok, _} = Sites.accept_invitation(invitation, user)
+            Accounts.deliver_welcome(user, url(~p"/sites"))
 
             conn
             |> put_session(:user_return_to, ~p"/#{invitation.site.slug}")

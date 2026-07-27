@@ -58,7 +58,7 @@ defmodule Masthead.AccountsConfirmationTest do
 
     test "rejects an expired token", %{user: user} do
       token = Accounts.generate_email_token(user, "confirm")
-      backdate_confirm_tokens(user, 8 * 24 * 60 * 60)
+      backdate_confirm_tokens(user, 31 * 24 * 60 * 60)
       assert :error = Accounts.confirm_user(token)
     end
   end

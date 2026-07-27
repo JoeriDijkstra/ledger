@@ -60,13 +60,13 @@ defmodule Masthead.AccountsTokenTest do
     refute Accounts.get_user_by_token("", "confirm")
   end
 
-  test "a confirm token expires after 7 days", %{user: user} do
+  test "a confirm token expires after 30 days", %{user: user} do
     raw = Accounts.generate_email_token(user, "confirm")
 
-    backdate_tokens(user, 7 * 24 * 60 * 60 - 60)
+    backdate_tokens(user, 30 * 24 * 60 * 60 - 60)
     assert Accounts.get_user_by_token(raw, "confirm")
 
-    backdate_tokens(user, 7 * 24 * 60 * 60 + 60)
+    backdate_tokens(user, 30 * 24 * 60 * 60 + 60)
     refute Accounts.get_user_by_token(raw, "confirm")
   end
 

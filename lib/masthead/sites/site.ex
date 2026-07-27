@@ -17,10 +17,14 @@ defmodule Masthead.Sites.Site do
     field :custom_domain_verified_at, :utc_datetime
     field :custom_domain_last_checked_at, :utc_datetime
     field :custom_domain_last_error, :string
-    # Set/cleared by a member account's disable cascade
-    # (Masthead.Accounts.disable_user/1), but only for single-member sites.
     # Non-null => the site does not resolve publicly (Subdomain plug 404s).
+    # Set either by the member-availability cascade (when a site loses its last
+    # verified member) or by an admin pausing it from the console.
     field :disabled_at, :utc_datetime
+    # Why the site is disabled, so re-enable-on-verify only heals sites that
+    # went offline for lack of a verified member — never an admin pause.
+    #   "no_verified_member" (auto cascade) | "admin" (manual) | nil (online)
+    field :disabled_reason, :string
     # Admin soft-delete (distinct from `disabled_at`): hides the site from
     # its members and the public, but the row is retained for recovery.
     field :deleted_at, :utc_datetime
