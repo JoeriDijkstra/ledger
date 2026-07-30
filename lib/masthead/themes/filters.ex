@@ -29,6 +29,32 @@ defmodule Masthead.Themes.Filters do
   def asset_url(filename, _), do: filename
 
   @doc """
+  JSON-encode a value so a theme can hand it to its JavaScript. The
+  intended shape is a config global in the layout, read by a static asset:
+
+      <script>window.Masthead = { tokens: {{ theme.tokens | json }} };</script>
+      <script src="{{ 'app.js' | asset_url: theme.asset_base }}"></script>
+
+  Theme `.js` files are served as static bytes and are never templated, so
+  this is how per-site values reach them. Emit the config script *before*
+  the asset that reads it.
+
+  The output is escaped for embedding directly inside a `<script>` block:
+  `<`, `>`, `&` and the U+2028/U+2029 line separators become `\\uXXXX`
+  escapes, so a token value containing `</script>` cannot break out of the
+  tag. Works on any context value, not just the token map —
+  `{{ theme.tokens.nav_links | json }}`, `{{ posts | json }}`.
+
+  Values Jason can't encode (a struct with no encoder, e.g. `posts_by_tag`)
+  yield `null` rather than failing the render.
+  """
+  def json(value) do
+    Jason.encode!(value, escape: :html_safe)
+  rescue
+    _ -> "null"
+  end
+
+  @doc """
   Format a `DateTime` (or anything with `to_iso8601/1`) using
   `Calendar.strftime/2`. Solid ships a `date` filter but it's geared
   toward strings/Unix timestamps and trips on `%DateTime{}` structs.

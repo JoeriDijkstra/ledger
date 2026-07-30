@@ -39,6 +39,48 @@ defmodule Masthead.Themes.FiltersTest do
     end
   end
 
+  describe "json/1" do
+    test "encodes scalars, maps and lists" do
+      assert Filters.json("hi") == ~s("hi")
+      assert Filters.json(42) == "42"
+      assert Filters.json(true) == "true"
+      assert Filters.json(nil) == "null"
+      assert Filters.json(%{"accent" => "#0066cc"}) == ~s({"accent":"#0066cc"})
+      assert Filters.json([%{"label" => "A"}]) == ~s([{"label":"A"}])
+    end
+
+    test "escapes so a value cannot break out of a <script> block" do
+      encoded = Filters.json(%{"title" => "</script><script>alert(1)</script>"})
+
+      refute String.contains?(encoded, "</script>")
+      refute String.contains?(encoded, "<script")
+      assert String.contains?(encoded, "\\u003C")
+    end
+
+    test "escapes the U+2028/U+2029 separators that break JS string literals" do
+      encoded = Filters.json("a b c")
+
+      refute String.contains?(encoded, " ")
+      refute String.contains?(encoded, " ")
+    end
+
+    test "round-trips back to the original value" do
+      tokens = %{
+        "accent" => "#0066cc",
+        "show_search" => true,
+        "hero" => %{"title" => "Hello <world> & \"friends\""},
+        "links" => [%{"label" => "A", "url" => "/a"}]
+      }
+
+      assert Jason.decode!(Filters.json(tokens)) == tokens
+    end
+
+    test "un-encodable values yield null instead of failing the render" do
+      assert Filters.json(%Masthead.Themes.TagPosts{resolver: fn _ -> [] end}) == "null"
+      assert Filters.json(self()) == "null"
+    end
+  end
+
   describe "search/2" do
     setup do
       posts = [

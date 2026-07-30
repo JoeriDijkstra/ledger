@@ -10,6 +10,12 @@
       {{ theme.css }}
       {{ site.css_overrides }}
     </style>
+    {%- comment -%}
+      Tokens for JavaScript. Theme `.js` assets are served as static bytes and
+      are never templated, so this global is how per-site values reach them.
+      Keep it above any `<script src>` that reads it.
+    {%- endcomment -%}
+    <script>window.Masthead = { tokens: {{ theme.tokens | json }} };</script>
   </head>
   <body>
     {% unless page.metadata.show_navigation == false %}

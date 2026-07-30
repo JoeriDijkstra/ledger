@@ -15,7 +15,7 @@
     posts_by_tag    -> posts_by_tag["slug"] => live, DB-backed, site-scoped post list
 
   Custom filters (plus all standard Solid filters: default, date, upcase, size, where, ...):
-    asset_url: base | strftime: "fmt" | iso8601 | where_tag: "slug" | search: "query"
+    asset_url: base | strftime: "fmt" | iso8601 | where_tag: "slug" | search: "query" | json
 -->
 <section class="liquid-showcase">
 
@@ -183,5 +183,23 @@
   <h2>8. Asset URLs</h2>
   <p>Resolves a theme asset against the active asset base:</p>
   <p><code>{{ "logo.svg" | asset_url: theme.asset_base }}</code></p>
+
+  {%- comment -%} ───────────── 9. json — tokens in JavaScript ───────────── {%- endcomment -%}
+  <h2>9. Tokens in JavaScript</h2>
+  <p>
+    Theme <code>.js</code> assets are served as static bytes and are never run
+    through Liquid, so per-site values reach them via a config global emitted
+    from the layout. The <code>json</code> filter encodes any context value
+    safely for a <code>&lt;script&gt;</code> block — a token containing
+    <code>&lt;/script&gt;</code> can't break out of the tag.
+  </p>
+  <p>In <code>templates/layout.liquid</code>:</p>
+  <pre><code>&lt;script&gt;window.Masthead = { tokens: {{ "{{" }} theme.tokens | json {{ "}}" }} };&lt;/script&gt;
+&lt;script src="{{ "{{" }} 'app.js' | asset_url: theme.asset_base {{ "}}" }}"&gt;&lt;/script&gt;</code></pre>
+  <p>Then in <code>assets/app.js</code> (static, cached across every site):</p>
+  <pre><code>const { accent, show_search } = window.Masthead.tokens;
+if (show_search) initSearch();</code></pre>
+  <p>This site's tokens, encoded: <code>{{ theme.tokens | json }}</code></p>
+  <p>Any value works, not just the token map: <code>{{ tags | json }}</code></p>
 
 </section>

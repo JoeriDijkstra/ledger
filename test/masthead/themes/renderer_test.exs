@@ -325,6 +325,36 @@ defmodule Masthead.Themes.RendererTest do
     end
   end
 
+  # Theme `.js` assets are static bytes, never templated — the layout hands
+  # them per-site values through a JSON config global. Decoding it here proves
+  # the escaping is reversible, which is what a browser actually does.
+  defp masthead_global(html) do
+    [_, json] = Regex.run(~r/window\.Masthead = \{ tokens: (.+?) \};/s, html)
+    Jason.decode!(json)
+  end
+
+  describe "tokens in JavaScript" do
+    test "the layout emits the site's tokens as a JSON global", %{site: site} do
+      out = Renderer.render_index(%{site: site, posts: [], pages: []})
+
+      assert %{"accent" => "#0066cc", "show_search" => false} = masthead_global(out)
+    end
+
+    test "booleans survive as real JSON booleans, not strings", %{site: site} do
+      {:ok, site} = Sites.update_settings(site, %{"theme_tokens" => %{"show_search" => true}})
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      assert masthead_global(out)["show_search"] === true
+    end
+
+    test "a per-site override reaches JavaScript", %{site: site} do
+      {:ok, site} = Sites.update_settings(site, %{"theme_tokens" => %{"accent" => "#ff0000"}})
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      assert masthead_global(out)["accent"] == "#ff0000"
+    end
+  end
+
   describe "object/list tokens" do
     setup %{user: user, site: site} do
       slug = "conttest#{System.unique_integer([:positive])}"
@@ -396,6 +426,45 @@ defmodule Masthead.Themes.RendererTest do
       assert out =~ "--accent: #ff0000"
       refute out =~ "--hero"
       refute out =~ "--links"
+    end
+
+    test "container tokens do reach JavaScript, with file fields resolved", %{site: site} do
+      shot = create_upload(site, "shot.png")
+
+      {:ok, site} =
+        Sites.update_settings(site, %{
+          "theme_tokens" => %{
+            "hero" => %{"title" => "Custom hero"},
+            "links" => [%{"label" => "Docs", "url" => "/docs", "icon" => to_string(shot.id)}]
+          }
+        })
+
+      tokens =
+        %{site: Sites.get_site!(site.id), posts: [], pages: []}
+        |> Renderer.render_index()
+        |> masthead_global()
+
+      assert tokens["hero"]["title"] == "Custom hero"
+      assert [%{"label" => "Docs", "url" => "/docs", "icon" => icon}] = tokens["links"]
+      assert icon == Uploads.url(shot)
+    end
+
+    test "a hostile token value cannot break out of the <script> block", %{site: site} do
+      {:ok, site} =
+        Sites.update_settings(site, %{
+          "theme_tokens" => %{"hero" => %{"title" => "</script><script>alert(1)</script>"}}
+        })
+
+      out = Renderer.render_index(%{site: Sites.get_site!(site.id), posts: [], pages: []})
+
+      # Scoped to the emitted <script> block: the body renders hero.title
+      # without `| escape`, which is the theme author's call, not this feature's.
+      [_, block] = Regex.run(~r/(window\.Masthead = .+?;)/s, out)
+      refute block =~ "</script>"
+      refute block =~ "<script"
+
+      # Escaped in the source, yet still the exact string once JSON-parsed.
+      assert masthead_global(out)["hero"]["title"] == "</script><script>alert(1)</script>"
     end
   end
 
@@ -705,7 +774,8 @@ defmodule Masthead.Themes.RendererTest do
           "metadata" => []
         }),
       "templates/layout.liquid" =>
-        "<html><head></head><body>{{ theme.css }}{{ content }}</body></html>",
+        "<html><head><script>window.Masthead = { tokens: {{ theme.tokens | json }} };</script></head>" <>
+          "<body>{{ theme.css }}{{ content }}</body></html>",
       "templates/index.liquid" =>
         ~s(<section data-hero-title="{{ theme.tokens.hero.title }}" data-hero-image="{{ theme.tokens.hero.image }}">) <>
           ~s(<ul>{% for link in theme.tokens.links %}<li data-url="{{ link.url }}" data-icon="{{ link.icon }}">{{ link.label }}</li>{% endfor %}</ul>) <>
