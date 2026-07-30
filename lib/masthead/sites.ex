@@ -106,11 +106,23 @@ defmodule Masthead.Sites do
     site |> Ecto.Changeset.change(%{field => value}) |> Repo.update()
   end
 
-  @doc "Pauses a site (stops resolving). Reversible via `enable_site/1`."
-  def disable_site(%Site{} = site), do: set_site_timestamp(site, :disabled_at, truncated_now())
+  @doc """
+  Pauses a site manually from the console (stops resolving). Tagged
+  `disabled_reason: "admin"` so the member-availability cascade never
+  re-enables it. Reversible via `enable_site/1`.
+  """
+  def disable_site(%Site{} = site) do
+    site
+    |> Ecto.Changeset.change(disabled_at: truncated_now(), disabled_reason: "admin")
+    |> Repo.update()
+  end
 
-  @doc "Un-pauses a site."
-  def enable_site(%Site{} = site), do: set_site_timestamp(site, :disabled_at, nil)
+  @doc "Un-pauses a site (admin)."
+  def enable_site(%Site{} = site) do
+    site
+    |> Ecto.Changeset.change(disabled_at: nil, disabled_reason: nil)
+    |> Repo.update()
+  end
 
   @doc "Soft-deletes a site (hidden from owner + public; retained for recovery)."
   def soft_delete_site(%Site{} = site) do
@@ -130,41 +142,68 @@ defmodule Masthead.Sites do
   defp truncated_now, do: DateTime.utc_now() |> DateTime.truncate(:second)
 
   @doc """
-  Soft-disables the account-disable cascade's sites: only sites where
-  `user_id` is the **sole** member (a collaborative site with any second
-  member stays online, since the other members are unaffected).
+  Auto-disables sites in `site_ids` that have **no verified member left**
+  (verified = confirmed email and active account). Call this after a *verified*
+  member is lost (disabled/suspended) — a site that still has a verified member
+  stays online, and admin-paused / soft-deleted sites are untouched. Disabled
+  rows are tagged `disabled_reason: "no_verified_member"` so `reenable_recovered_sites/1`
+  can heal them later without resurrecting an admin pause.
   """
-  def disable_sites_for_user(user_id) do
-    now = DateTime.utc_now() |> DateTime.truncate(:second)
+  def disable_orphaned_sites(site_ids) when is_list(site_ids) do
+    keep = sites_with_verified_member(site_ids)
+    orphaned = site_ids -- keep
 
     Repo.update_all(
       from(s in Site,
-        where: s.id in subquery(solo_site_ids_for_user(user_id)) and is_nil(s.disabled_at)
+        where: s.id in ^orphaned and is_nil(s.disabled_at) and is_nil(s.deleted_at)
       ),
-      set: [disabled_at: now]
+      set: [disabled_at: truncated_now(), disabled_reason: "no_verified_member"]
     )
   end
 
-  @doc "Re-enables the single-member sites of `user_id` (account re-enable)."
-  def enable_sites_for_user(user_id) do
+  @doc """
+  Re-enables sites in `site_ids` that regained a verified member **and** were
+  auto-disabled for lack of one (`disabled_reason == "no_verified_member"`).
+  Call after a member is verified/enabled. Never touches admin-paused
+  (`"admin"`) or soft-deleted sites.
+  """
+  def reenable_recovered_sites(site_ids) when is_list(site_ids) do
+    recovered = sites_with_verified_member(site_ids)
+
     Repo.update_all(
       from(s in Site,
-        where: s.id in subquery(solo_site_ids_for_user(user_id)) and not is_nil(s.disabled_at)
+        where: s.id in ^recovered and s.disabled_reason == "no_verified_member"
       ),
-      set: [disabled_at: nil]
+      set: [disabled_at: nil, disabled_reason: nil]
     )
   end
 
-  # Site ids where `user_id` is a member AND the site has exactly one member
-  # (which therefore must be this user).
-  defp solo_site_ids_for_user(user_id) do
-    user_site_ids = from(m in SiteMembership, where: m.user_id == ^user_id, select: m.site_id)
+  @doc "Auto-disable the sites of `user_id` that just lost their last verified member."
+  def disable_orphaned_sites_for_user(user_id),
+    do: user_id |> member_site_ids() |> Repo.all() |> disable_orphaned_sites()
 
-    from m in SiteMembership,
-      where: m.site_id in subquery(user_site_ids),
-      group_by: m.site_id,
-      having: count(m.id) == 1,
-      select: m.site_id
+  @doc "Re-enable the auto-disabled sites of `user_id` that regained a verified member."
+  def reenable_recovered_sites_for_user(user_id),
+    do: user_id |> member_site_ids() |> Repo.all() |> reenable_recovered_sites()
+
+  # Site ids `user_id` is a member of.
+  defp member_site_ids(user_id) do
+    from m in SiteMembership, where: m.user_id == ^user_id, select: m.site_id
+  end
+
+  # Of `site_ids`, the ones with at least one verified member (confirmed +
+  # active). These are the sites that should stay/become available.
+  defp sites_with_verified_member(site_ids) do
+    Repo.all(
+      from m in SiteMembership,
+        join: u in User,
+        on: u.id == m.user_id,
+        where:
+          m.site_id in ^site_ids and not is_nil(u.confirmed_at) and
+            is_nil(u.disabled_at),
+        distinct: true,
+        select: m.site_id
+    )
   end
 
   @doc """

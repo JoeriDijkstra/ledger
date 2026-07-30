@@ -26,7 +26,7 @@ defmodule Masthead.Accounts.UserNotifier do
 
     #{url}
 
-    This link expires in 7 days. If you didn't create a Masthead account, you
+    This link expires in 30 days. If you didn't create a Masthead account, you
     can safely ignore this email.
     """
 
@@ -35,11 +35,127 @@ defmodule Masthead.Accounts.UserNotifier do
         paragraph("Welcome to Masthead! Confirm your email address to activate your account."),
         button("Confirm your account", url),
         muted(
-          "This link expires in 7 days. If you didn't create a Masthead account, you can safely ignore this email."
+          "This link expires in 30 days. If you didn't create a Masthead account, you can safely ignore this email."
         )
       ])
 
     deliver(user.email, "Confirm your Masthead account", text, html)
+  end
+
+  @doc "One-time welcome, sent once an account is verified (or created via OAuth/invite)."
+  def deliver_welcome(user, sites_url) do
+    text = """
+    Hi,
+
+    Welcome to Masthead — your account is all set. Masthead gives you a simple
+    website without the complexity: write in Markdown or HTML, pick a theme, and
+    publish on your own subdomain.
+
+    Jump in and create your first site:
+
+    #{sites_url}
+    """
+
+    html =
+      layout([
+        paragraph("Welcome to Masthead — your account is all set."),
+        paragraph(
+          "Masthead gives you a simple website without the complexity: write in " <>
+            "Markdown or HTML, pick a theme, and publish on your own subdomain."
+        ),
+        button("Go to your sites", sites_url)
+      ])
+
+    deliver(user.email, "Welcome to Masthead", text, html)
+  end
+
+  @doc "Day-14 nudge for an account that hasn't signed in for over a week."
+  def deliver_login_reminder(user, login_url) do
+    text = """
+    Hi,
+
+    We haven't seen you in a while. Your Masthead account is still here whenever
+    you're ready to pick things back up — log in to keep building your site:
+
+    #{login_url}
+    """
+
+    html =
+      layout([
+        paragraph("We haven't seen you in a while."),
+        paragraph(
+          "Your Masthead account is still here whenever you're ready to pick things " <>
+            "back up. Log in to keep building your site."
+        ),
+        button("Log in", login_url)
+      ])
+
+    deliver(user.email, "Your Masthead account is waiting", text, html)
+  end
+
+  @doc """
+  Verify-or-lose-it warning for an unconfirmed account. `days_left` is how long
+  until the account is suspended (14 at day 16, 7 at day 23).
+  """
+  def deliver_verify_warning(user, confirm_url, days_left) do
+    when_str = if days_left == 1, do: "1 day", else: "#{days_left} days"
+
+    text = """
+    Hi,
+
+    Your Masthead email address still isn't confirmed. If it isn't confirmed
+    within #{when_str}, your account will be suspended and any site with no other
+    confirmed member will go offline.
+
+    Confirm now to keep everything active:
+
+    #{confirm_url}
+    """
+
+    html =
+      layout([
+        paragraph("Your Masthead email address still isn't confirmed."),
+        paragraph(
+          "If it isn't confirmed within #{when_str}, your account will be suspended and " <>
+            "any site with no other confirmed member will go offline."
+        ),
+        button("Confirm your account", confirm_url),
+        muted("Already confirmed? You can ignore this email.")
+      ])
+
+    deliver(user.email, "Confirm your email to keep your account active", text, html)
+  end
+
+  @doc "Day-30 notice that the (still-unconfirmed) account has been suspended, with recovery steps."
+  def deliver_account_suspended(user, login_url) do
+    text = """
+    Hi,
+
+    Your Masthead account has been suspended because your email address was never
+    confirmed. Any site that had no other confirmed member is now offline.
+
+    You can restore everything in two steps:
+
+    1. Log in at #{login_url}
+    2. Confirm your email from the prompt shown there
+
+    As soon as you confirm, your account and its sites are reactivated
+    automatically.
+    """
+
+    html =
+      layout([
+        paragraph(
+          "Your Masthead account has been suspended because your email address was " <>
+            "never confirmed. Any site that had no other confirmed member is now offline."
+        ),
+        paragraph("You can restore everything in two steps:"),
+        paragraph("1. Log in below.  2. Confirm your email from the prompt shown there."),
+        button("Log in to restore your account", login_url),
+        muted("As soon as you confirm, your account and its sites are reactivated automatically.")
+      ])
+
+    deliver(user.email, "Your Masthead account has been suspended", text, html)
   end
 
   @doc "Password-reset link."

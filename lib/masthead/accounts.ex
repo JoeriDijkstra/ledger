@@ -4,6 +4,7 @@ defmodule Masthead.Accounts do
   alias Masthead.Repo
   alias Masthead.Accounts.User
   alias Masthead.Accounts.UserToken
+  alias Masthead.Accounts.UserNotification
   alias Masthead.Accounts.UserNotifier
   alias Masthead.Accounts.UserIdentity
   alias Masthead.Sites
@@ -112,6 +113,11 @@ defmodule Masthead.Accounts do
       :tokens,
       UserToken.by_user_and_contexts_query(user, ["confirm"])
     )
+    # Confirming makes this account a verified member, which can bring a site
+    # (disabled for lack of one) back online.
+    |> Ecto.Multi.run(:sites, fn _repo, _ ->
+      {:ok, Sites.reenable_recovered_sites_for_user(user.id)}
+    end)
   end
 
   ## Password reset
@@ -191,15 +197,23 @@ defmodule Masthead.Accounts do
   ## Account disable / enable
 
   @doc """
-  Soft-disables `user`: stamps `disabled_at`, cascades to every site the
-  user owns (those sites stop resolving — 404), and revokes all tokens.
-  Idempotent. Re-enable via `enable_user/1`.
+  Soft-disables `user`: stamps `disabled_at`, takes offline any of their sites
+  that are left with no verified member, and revokes all tokens. Idempotent.
+  Re-enable via `enable_user/1`.
+
+  Disabling an *unverified* user never changes a site's verified-member count,
+  so the site cascade is skipped entirely — disabling an unconfirmed collaborator
+  never takes a site offline.
   """
   def disable_user(%User{} = user) do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:user, User.disable_changeset(user))
     |> Ecto.Multi.run(:sites, fn _repo, _ ->
-      {:ok, Sites.disable_sites_for_user(user.id)}
+      if User.confirmed?(user) and is_nil(user.disabled_at) do
+        {:ok, Sites.disable_orphaned_sites_for_user(user.id)}
+      else
+        {:ok, {0, nil}}
+      end
     end)
     |> Ecto.Multi.delete_all(:tokens, UserToken.by_user_and_contexts_query(user, :all))
     |> Repo.transaction()
@@ -221,27 +235,99 @@ defmodule Masthead.Accounts do
   end
 
   @doc """
-  Disables accounts that never confirmed their email within
-  `older_than_days` (default 7) of signing up. Skips already-disabled
-  accounts. Returns the number disabled. Driven by
-  `Masthead.Workers.DisableUnconfirmed` on a daily cron.
+  Suspends accounts that never confirmed their email within `older_than_days`
+  (default 30) of signing up, taking offline any of their sites left without a
+  verified member. Unlike a disable this keeps the session/tokens intact so the
+  user can log in and confirm (the verify gate pins them until they do). Skips
+  already-disabled/suspended accounts. Returns the suspended users so the caller
+  can send the "account suspended" email. Driven by
+  `Masthead.Workers.SuspendUnconfirmed` on a daily cron.
   """
-  def disable_unconfirmed_accounts(older_than_days \\ 7) do
-    cutoff =
-      DateTime.utc_now()
-      |> DateTime.add(-older_than_days * 24 * 60 * 60, :second)
-      |> DateTime.truncate(:second)
-
+  def suspend_unconfirmed_accounts(older_than_days \\ 30) do
     stale =
       Repo.all(
         from u in User,
           where:
             is_nil(u.confirmed_at) and is_nil(u.disabled_at) and
-              u.inserted_at < ^cutoff
+              is_nil(u.suspended_at) and u.inserted_at < ^ago(older_than_days)
       )
 
-    Enum.each(stale, &disable_user/1)
-    length(stale)
+    Enum.each(stale, &suspend_user/1)
+    stale
+  end
+
+  defp suspend_user(%User{} = user) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:user, User.suspend_changeset(user))
+    |> Ecto.Multi.run(:sites, fn _repo, _ ->
+      {:ok, Sites.disable_orphaned_sites_for_user(user.id)}
+    end)
+    |> Repo.transaction()
+  end
+
+  @doc """
+  Unconfirmed, still-active accounts whose signup age is in `[min_days,
+  max_days)` — the audience for a verify-or-lose-it warning email. Bounded so a
+  backlog never fires the day-16 and day-23 warnings on the same run.
+  """
+  def unconfirmed_accounts_aged(min_days, max_days)
+      when is_integer(min_days) and is_integer(max_days) do
+    Repo.all(
+      from u in User,
+        where:
+          is_nil(u.confirmed_at) and is_nil(u.disabled_at) and is_nil(u.suspended_at) and
+            u.inserted_at <= ^ago(min_days) and u.inserted_at > ^ago(max_days)
+    )
+  end
+
+  @doc """
+  Active accounts ~2 weeks old that haven't signed in for over a week (or never
+  since signup) and still want nudge emails — the day-14 "we miss you" audience.
+  Sent regardless of verification status.
+  """
+  def accounts_due_for_login_reminder do
+    week_ago = ago(7)
+
+    Repo.all(
+      from u in User,
+        where:
+          is_nil(u.disabled_at) and is_nil(u.suspended_at) and u.wants_onboarding_emails and
+            u.inserted_at <= ^ago(14) and u.inserted_at > ^ago(16) and
+            (is_nil(u.last_login_at) or u.last_login_at < ^week_ago)
+    )
+  end
+
+  @doc """
+  Enqueues the welcome email for `user`, at most once ever (guarded by the
+  `user_notifications` sent-log). `sites_url` is the link into the admin.
+  """
+  def deliver_welcome(%User{} = user, sites_url) do
+    notify_once(user.id, "welcome", fn -> UserNotifier.deliver_welcome(user, sites_url) end)
+  end
+
+  @doc """
+  Runs `fun` exactly once per `(user_id, kind)`. The first call inserts the
+  sent-log row and runs `fun`; later calls no-op (`:already_sent`). Used to make
+  lifecycle emails idempotent across daily sweeps.
+  """
+  def notify_once(user_id, kind, fun) when is_function(fun, 0) do
+    %UserNotification{}
+    |> UserNotification.changeset(%{user_id: user_id, kind: kind})
+    |> Repo.insert(on_conflict: :nothing, conflict_target: [:user_id, :kind])
+    |> case do
+      {:ok, %UserNotification{id: id}} when not is_nil(id) ->
+        fun.()
+        :ok
+
+      _ ->
+        :already_sent
+    end
+  end
+
+  defp ago(days) do
+    DateTime.utc_now()
+    |> DateTime.add(-days * 24 * 60 * 60, :second)
+    |> DateTime.truncate(:second)
   end
 
   ## OAuth / SSO
@@ -259,7 +345,7 @@ defmodule Masthead.Accounts do
   Returns `{:ok, user}` or `{:error, :disabled | :no_email |
   :email_unverified}`.
   """
-  def get_or_create_user_from_oauth(%{provider: provider, uid: uid} = info) do
+  def get_or_create_user_from_oauth(%{provider: provider, uid: uid} = info, opts \\ []) do
     provider = to_string(provider)
     uid = to_string(uid)
 
@@ -268,11 +354,11 @@ defmodule Masthead.Accounts do
         return_if_active(Repo.preload(identity, :user).user)
 
       nil ->
-        link_or_create(provider, uid, info)
+        link_or_create(provider, uid, info, opts)
     end
   end
 
-  defp link_or_create(provider, uid, %{email: email} = info)
+  defp link_or_create(provider, uid, %{email: email} = info, opts)
        when is_binary(email) and email != "" do
     case get_user_by_email(email) do
       %User{} = user ->
@@ -283,11 +369,11 @@ defmodule Masthead.Accounts do
         end
 
       nil ->
-        create_user_with_identity(email, provider, uid)
+        create_user_with_identity(email, provider, uid, opts)
     end
   end
 
-  defp link_or_create(_provider, _uid, _info), do: {:error, :no_email}
+  defp link_or_create(_provider, _uid, _info, _opts), do: {:error, :no_email}
 
   defp link_identity(user, provider, uid) do
     %UserIdentity{}
@@ -297,7 +383,7 @@ defmodule Masthead.Accounts do
     {:ok, user}
   end
 
-  defp create_user_with_identity(email, provider, uid) do
+  defp create_user_with_identity(email, provider, uid, opts) do
     Ecto.Multi.new()
     |> Ecto.Multi.insert(:user, User.oauth_registration_changeset(%User{}, %{email: email}))
     |> Ecto.Multi.insert(:identity, fn %{user: user} ->
@@ -309,8 +395,14 @@ defmodule Masthead.Accounts do
     end)
     |> Repo.transaction()
     |> case do
-      {:ok, %{user: user}} -> {:ok, user}
-      {:error, _, changeset, _} -> {:error, changeset}
+      {:ok, %{user: user}} ->
+        # OAuth accounts are confirmed on creation, so this is their only
+        # welcome trigger. `on_create` lets the caller pass a route-built URL.
+        if on_create = opts[:on_create], do: on_create.(user)
+        {:ok, user}
+
+      {:error, _, changeset, _} ->
+        {:error, changeset}
     end
   end
 
@@ -326,7 +418,7 @@ defmodule Masthead.Accounts do
     Ecto.Multi.new()
     |> Ecto.Multi.update(:user, User.enable_changeset(user))
     |> Ecto.Multi.run(:sites, fn _repo, _ ->
-      {:ok, Sites.enable_sites_for_user(user.id)}
+      {:ok, Sites.reenable_recovered_sites_for_user(user.id)}
     end)
     |> Repo.transaction()
     |> case do
@@ -374,8 +466,22 @@ defmodule Masthead.Accounts do
     user |> Ecto.Changeset.change(last_login_at: now) |> Repo.update()
   end
 
-  @doc "Marks a user's email confirmed without a token (admin verify)."
-  def verify_user(%User{} = user), do: user |> User.confirm_changeset() |> Repo.update()
+  @doc """
+  Marks a user's email confirmed without a token (admin verify). Also lifts any
+  suspension and brings back sites disabled for lack of a verified member.
+  """
+  def verify_user(%User{} = user) do
+    Ecto.Multi.new()
+    |> Ecto.Multi.update(:user, User.confirm_changeset(user))
+    |> Ecto.Multi.run(:sites, fn _repo, _ ->
+      {:ok, Sites.reenable_recovered_sites_for_user(user.id)}
+    end)
+    |> Repo.transaction()
+    |> case do
+      {:ok, %{user: user}} -> {:ok, user}
+      {:error, _, reason, _} -> {:error, reason}
+    end
+  end
 
   @doc "Grants or revokes platform-admin access (console / admin use)."
   def set_admin(%User{} = user, admin?) when is_boolean(admin?) do

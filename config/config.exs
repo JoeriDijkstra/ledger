@@ -112,8 +112,10 @@ config :masthead, Oban,
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     {Oban.Plugins.Cron,
      crontab: [
-       # Daily 03:00 UTC: disable accounts unconfirmed for 7+ days.
-       {"0 3 * * *", Masthead.Workers.DisableUnconfirmed},
+       # Daily 03:00 UTC: suspend accounts unconfirmed for 30+ days.
+       {"0 3 * * *", Masthead.Workers.SuspendUnconfirmed},
+       # Daily 03:30 UTC: staged lifecycle emails (day 14 nudge, day 16/23 warnings).
+       {"30 3 * * *", Masthead.Workers.LifecycleEmails},
        # Daily 04:00 UTC: remind owners of onboarding actions open for 7+ days.
        {"0 4 * * *", Masthead.Workers.OnboardingReminder}
      ]}

@@ -22,6 +22,12 @@ defmodule Masthead.SitesMembershipsTest do
     user
   end
 
+  defp verified_user(prefix) do
+    user = user(prefix)
+    {:ok, user} = Accounts.confirm_user(Accounts.generate_email_token(user, "confirm"))
+    user
+  end
+
   defp site_for(user) do
     {:ok, site} =
       Sites.create_site(
@@ -160,18 +166,27 @@ defmodule Masthead.SitesMembershipsTest do
     end
   end
 
-  describe "single-member auto-disable cascade" do
-    test "disabling an account takes down its solo site but not a shared one", %{user: user} do
-      solo = site_for(user)
-      shared = site_for(user)
-      {:ok, _} = Sites.add_member(shared, user("b"))
+  describe "verified-member availability cascade" do
+    test "disabling a verified owner takes down a site with no other verified member" do
+      owner = verified_user("owner")
+      solo = site_for(owner)
+      shared = site_for(owner)
+      {:ok, _} = Sites.add_member(shared, verified_user("b"))
 
-      {:ok, _} = Accounts.disable_user(user)
+      {:ok, _} = Accounts.disable_user(owner)
 
-      # Solo site: user was the only member -> disabled (stops resolving).
+      # Solo site: lost its only verified member -> offline.
       refute Sites.get_site_by_slug(solo.slug)
-      # Shared site: another member remains -> stays online.
+      # Shared site: another verified member remains -> stays online.
       assert Sites.get_site_by_slug(shared.slug)
+    end
+
+    test "disabling an unverified user never takes a site offline", %{user: unverified} do
+      site = site_for(unverified)
+
+      {:ok, _} = Accounts.disable_user(unverified)
+
+      assert Sites.get_site_by_slug(site.slug)
     end
   end
 end

@@ -50,6 +50,24 @@ defmodule MastheadWeb.UserAuth do
     end
   end
 
+  @doc """
+  Pins a suspended (day-30 unconfirmed) user to the verify screen: every
+  authenticated page except `/verify` redirects there until they confirm.
+  Runs after `require_authenticated_user`. A non-suspended (or logged-out)
+  request passes straight through.
+  """
+  def require_verified_user(conn, _opts) do
+    user = conn.assigns[:current_user]
+
+    if user && user.suspended_at && current_path(conn) != "/verify" do
+      conn
+      |> redirect(to: "/verify")
+      |> halt()
+    else
+      conn
+    end
+  end
+
   def require_admin_user(conn, _opts) do
     user = conn.assigns[:current_user]
 
@@ -104,6 +122,19 @@ defmodule MastheadWeb.UserAuth do
        socket
        |> Phoenix.LiveView.put_flash(:error, "You must log in to access that page.")
        |> Phoenix.LiveView.redirect(to: "/login")}
+    end
+  end
+
+  # Pairs with the `:require_authenticated` on_mount (which assigns
+  # `:current_user`): pins a suspended user to the verify screen for every
+  # live route.
+  def on_mount(:require_verified, _params, _session, socket) do
+    case socket.assigns[:current_user] do
+      %{suspended_at: at} when not is_nil(at) ->
+        {:halt, Phoenix.LiveView.redirect(socket, to: "/verify")}
+
+      _ ->
+        {:cont, socket}
     end
   end
 

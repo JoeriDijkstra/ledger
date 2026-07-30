@@ -8,6 +8,7 @@ defmodule Masthead.Accounts.User do
     field :hashed_password, :string, redact: true
     field :confirmed_at, :utc_datetime
     field :disabled_at, :utc_datetime
+    field :suspended_at, :utc_datetime
     field :last_login_at, :utc_datetime
     field :wants_onboarding_emails, :boolean, default: true
     field :admin, :boolean, default: false
@@ -27,6 +28,13 @@ defmodule Masthead.Accounts.User do
   @doc "Account is disabled (self-serve or auto-disabled)."
   def disabled?(%__MODULE__{disabled_at: at}), do: not is_nil(at)
 
+  @doc """
+  Account is suspended — an unconfirmed account that hit the 30-day cutoff.
+  Unlike `disabled?/1` the user can still log in, but is pinned to the verify
+  screen until they confirm.
+  """
+  def suspended?(%__MODULE__{suspended_at: at}), do: not is_nil(at)
+
   @doc "Platform admin (can manage all users/sites/themes)."
   def admin?(%__MODULE__{admin: admin}), do: admin == true
 
@@ -35,9 +43,12 @@ defmodule Masthead.Accounts.User do
     change(user, admin: admin?)
   end
 
-  @doc "Marks the email confirmed (no-op effect if already confirmed)."
+  @doc """
+  Marks the email confirmed and clears any suspension (confirming is exactly
+  what lifts a day-30 suspension). No-op effect if already confirmed.
+  """
   def confirm_changeset(user) do
-    change(user, confirmed_at: now())
+    change(user, confirmed_at: now(), suspended_at: nil)
   end
 
   @doc "Toggle the onboarding/nudge email opt-in (used by one-click unsubscribe)."
@@ -53,6 +64,11 @@ defmodule Masthead.Accounts.User do
   @doc "Clears the disabled flag (re-enable)."
   def enable_changeset(user) do
     change(user, disabled_at: nil)
+  end
+
+  @doc "Suspends the account (day-30 unconfirmed cutoff). Reversible by confirming."
+  def suspend_changeset(user) do
+    change(user, suspended_at: now())
   end
 
   @doc "Sets a new password (password-reset flow)."

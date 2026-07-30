@@ -26,7 +26,11 @@ defmodule MastheadWeb.AuthController do
   end
 
   def callback(%{assigns: %{ueberauth_auth: auth}} = conn, _params) do
-    case Accounts.get_or_create_user_from_oauth(oauth_info(auth)) do
+    # New OAuth accounts are confirmed on creation, so `on_create` is their one
+    # welcome trigger; returning users never fire it.
+    on_create = fn user -> Accounts.deliver_welcome(user, url(~p"/sites")) end
+
+    case Accounts.get_or_create_user_from_oauth(oauth_info(auth), on_create: on_create) do
       {:ok, user} ->
         UserAuth.log_in_user(conn, user, %{"flash" => "Signed in."})
 

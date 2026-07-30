@@ -2,7 +2,12 @@ defmodule MastheadWeb.Router do
   use MastheadWeb, :router
 
   import MastheadWeb.UserAuth,
-    only: [fetch_current_user: 2, require_authenticated_user: 2, require_admin_user: 2]
+    only: [
+      fetch_current_user: 2,
+      require_authenticated_user: 2,
+      require_verified_user: 2,
+      require_admin_user: 2
+    ]
 
   pipeline :browser do
     plug :accepts, ["html"]
@@ -61,7 +66,12 @@ defmodule MastheadWeb.Router do
   end
 
   scope "/", MastheadWeb do
-    pipe_through [:browser, :require_authenticated_user]
+    pipe_through [:browser, :require_authenticated_user, :require_verified_user]
+
+    # The forced-verify screen for suspended accounts. Must sit inside the
+    # verified-user pipeline (it exempts "/verify") so it's the one authenticated
+    # page a suspended user can reach.
+    get "/verify", VerifyController, :show
 
     get "/account", AccountController, :show
     post "/account/password", AccountController, :update_password
@@ -73,14 +83,20 @@ defmodule MastheadWeb.Router do
     # Admin overview — defined before the `/:site_slug` catch-all so "admin"
     # isn't resolved as a site slug.
     live_session :admin,
-      on_mount: [{MastheadWeb.UserAuth, :require_admin}] do
+      on_mount: [
+        {MastheadWeb.UserAuth, :require_admin},
+        {MastheadWeb.UserAuth, :require_verified}
+      ] do
       live "/admin", AdminLive.Console, :index
       live "/admin/:tab", AdminLive.Console, :index
       live "/admin/:tab/:filter", AdminLive.Console, :index
     end
 
     live_session :authenticated,
-      on_mount: [{MastheadWeb.UserAuth, :require_authenticated}] do
+      on_mount: [
+        {MastheadWeb.UserAuth, :require_authenticated},
+        {MastheadWeb.UserAuth, :require_verified}
+      ] do
       live "/sites", AdminLive.SiteIndex, :index
 
       # The active filter lives in the URL so each view is linkable.

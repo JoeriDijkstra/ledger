@@ -2,6 +2,8 @@ defmodule MastheadWeb.ConfirmationControllerTest do
   use MastheadWeb.ConnCase
   use Oban.Testing, repo: Masthead.Repo
 
+  import Ecto.Query
+
   alias Masthead.Accounts
   alias Masthead.Accounts.User
   alias Masthead.Repo
@@ -49,6 +51,30 @@ defmodule MastheadWeb.ConfirmationControllerTest do
       assert redirected_to(conn) == ~p"/login"
       assert Phoenix.Flash.get(conn.assigns.flash, :info) =~ "confirmed"
       assert User.confirmed?(Repo.reload(user))
+      # Welcome email fires on verification, exactly once.
+      assert_enqueued(
+        worker: Masthead.Workers.Email,
+        args: %{"to" => user.email, "subject" => "Welcome to Masthead"}
+      )
+    end
+
+    test "sends the welcome email only once across repeat confirms", %{conn: conn} do
+      user = new_user()
+      get(conn, ~p"/confirm/#{Accounts.generate_email_token(user, "confirm")}")
+      # A second confirm token + hit must not enqueue a second welcome.
+      get(conn, ~p"/confirm/#{Accounts.generate_email_token(user, "confirm")}")
+
+      count =
+        Repo.aggregate(
+          from(j in Oban.Job,
+            where:
+              fragment("? ->> 'to' = ?", j.args, ^user.email) and
+                fragment("? ->> 'subject' = ?", j.args, "Welcome to Masthead")
+          ),
+          :count
+        )
+
+      assert count == 1
     end
 
     test "rejects an invalid token without confirming anyone", %{conn: conn} do
