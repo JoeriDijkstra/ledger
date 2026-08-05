@@ -2577,6 +2577,106 @@ button.danger:hover { filter: brightness(0.92); }
 .picker-card-add:hover .picker-add-icon,
 .picker-card-add:hover .picker-name { color: var(--accent); }
 
+/* Command palette (Cmd/Ctrl+K) */
+
+/* The hidden trigger app.js clicks. Not display:none — it stays in the
+   accessibility tree so the shortcut has a real, labelled control behind it. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* Sits high rather than centred: the list grows downward as you type, and a
+   centred palette would jump around while the result count changes. */
+.palette-backdrop { align-items: flex-start; padding-top: 12vh; }
+.palette { max-width: 40rem; }
+.palette-form { margin: 0; }
+.palette-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1.1rem 1.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 16px 16px 0 0;
+  font-size: 1.05rem;
+  font-family: inherit;
+  background: transparent;
+  color: var(--fg);
+}
+.palette-input:focus { outline: none; }
+.palette-input::placeholder { color: var(--muted); }
+.palette-empty {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.palette-results {
+  overflow-y: auto;
+  max-height: 22rem;
+  padding: 0.5rem 0;
+}
+.palette-group + .palette-group { border-top: 1px solid var(--rule); }
+.palette-group-title {
+  margin: 0;
+  padding: 0.6rem 1.25rem 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.palette-group ul { list-style: none; margin: 0; padding: 0; }
+.palette-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 1.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+.palette-item:hover { background: var(--bg-soft); text-decoration: none; }
+/* Keyboard cursor. Distinct from :hover so moving the mouse over the list
+   doesn't make it ambiguous which row Enter will open. */
+.palette-item.is-active { background: var(--bg-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.palette-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-item-meta { flex: none; font-size: 0.78rem; color: var(--muted); }
+.palette-footer {
+  display: flex;
+  gap: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.palette-footer kbd {
+  display: inline-block;
+  min-width: 1.1rem;
+  margin-right: 0.2rem;
+  padding: 0.05rem 0.3rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--bg);
+  font-family: inherit;
+  font-size: 0.72rem;
+  text-align: center;
+}
+@media (max-width: 640px) {
+  .palette-backdrop { padding-top: 6vh; }
+  .palette-footer { display: none; }
+}
+
 /* Upload show / detail */
 .upload-show {
   display: grid;

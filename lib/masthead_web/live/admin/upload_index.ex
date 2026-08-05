@@ -29,9 +29,15 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
 
   @impl true
   def handle_params(params, _uri, socket) do
+    # `?new=1` opens the upload dialog on arrival, so the command palette's
+    # "New upload" lands on the thing it names rather than next to it.
     {:noreply,
      socket
-     |> assign(search: params["q"] || "", type_filter: parse_filter(params))
+     |> assign(
+       search: params["q"] || "",
+       type_filter: parse_filter(params),
+       modal_open?: params["new"] == "1" or socket.assigns[:modal_open?] == true
+     )
      |> reload_uploads()}
   end
 

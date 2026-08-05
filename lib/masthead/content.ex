@@ -45,6 +45,7 @@ defmodule Masthead.Content do
       a tag slug (string) to keep only posts carrying that tag. One value,
       not a combination: the toolbar is a single-select row of buttons.
     * `:search` — a string matched (ILIKE) against the post title.
+    * `:limit` — cap the number of rows returned.
   """
   def list_posts(site_id, opts \\ []) do
     from(p in Post,
@@ -54,8 +55,12 @@ defmodule Masthead.Content do
     )
     |> apply_post_filter(Keyword.get(opts, :filter, :all))
     |> apply_post_search(Keyword.get(opts, :search))
+    |> cap(Keyword.get(opts, :limit))
     |> Repo.all()
   end
+
+  defp cap(query, limit) when is_integer(limit), do: limit(query, ^limit)
+  defp cap(query, _limit), do: query
 
   defp apply_post_filter(query, :all), do: query
 
@@ -258,11 +263,13 @@ defmodule Masthead.Content do
     * `:filter` — `:all` (default), `:published` or `:draft`. Pages carry no
       tags, so the status filters are the whole set.
     * `:search` — a string matched (ILIKE) against the page title.
+    * `:limit` — cap the number of rows returned.
   """
   def list_pages(site_id, opts \\ []) do
     from(p in Page, where: p.site_id == ^site_id, order_by: p.title)
     |> apply_page_filter(Keyword.get(opts, :filter, :all))
     |> apply_page_search(Keyword.get(opts, :search))
+    |> cap(Keyword.get(opts, :limit))
     |> Repo.all()
   end
 
