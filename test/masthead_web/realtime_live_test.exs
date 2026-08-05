@@ -64,13 +64,15 @@ defmodule MastheadWeb.RealtimeLiveTest do
     test "a publish toggle elsewhere updates the status pill live", %{conn_b: conn, site: site} do
       {:ok, post} = Content.create_post(site.id, %{"title" => "Toggle Me"})
       {:ok, lv, _} = live(conn, ~p"/#{site.slug}/posts")
-      assert render(lv) =~ "Draft"
+      # Match the pill, not the bare word — "Draft" and "Published" are also
+      # filter-button labels in the toolbar.
+      assert render(lv) =~ "pill pill-draft"
 
       {:ok, _} = Content.update_post(post, %{"published" => "true"})
 
       html = render(lv)
-      assert html =~ "Published"
-      refute html =~ "Draft"
+      assert html =~ "pill pill-live"
+      refute html =~ "pill pill-draft"
     end
 
     test "a page created elsewhere appears in the pages index live", %{conn_b: conn, site: site} do

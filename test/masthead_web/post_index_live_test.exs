@@ -120,4 +120,83 @@ defmodule MastheadWeb.PostIndexLiveTest do
       refute html =~ "Lonely note"
     end
   end
+
+  describe "status filter" do
+    setup %{site: site} do
+      {:ok, published} = Content.create_post(site.id, %{"title" => "Shipped it"})
+      {:ok, _} = Content.update_post(published, %{"published" => "true"})
+      :ok
+    end
+
+    test "the toolbar shows without any tags on the site", %{conn: conn, site: site} do
+      assert Content.list_tags(site.id) == []
+
+      {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/posts")
+
+      assert html =~ ~s(phx-change="search_list")
+
+      for {value, label} <- Content.status_filter_options() do
+        assert html =~ ~s(phx-value-filter="#{value}")
+        assert html =~ label
+      end
+
+      # Tag filters are appended only once tags exist.
+      refute html =~ ~s(phx-value-filter="untagged")
+
+      # What app.js focuses on Cmd/Ctrl+F instead of the browser find bar.
+      assert html =~ ~s(data-shortcut="search")
+    end
+
+    test "tag filters are appended after the status filters", %{conn: conn, site: site} do
+      {:ok, tag} = Content.create_tag(site.id, %{"name" => "News"})
+      {:ok, _} = Content.create_post(site.id, %{"title" => "Tagged story", "tag_ids" => [tag.id]})
+
+      {:ok, _lv, html} = live(conn, ~p"/#{site.slug}/posts")
+
+      assert html =~ ~s(phx-value-filter="published")
+      assert html =~ ~s(phx-value-filter="untagged")
+      assert html =~ ~s(phx-value-filter="news")
+
+      # Status filters come first in the row.
+      [_, after_published] = String.split(html, ~s(phx-value-filter="published"), parts: 2)
+      assert after_published =~ ~s(phx-value-filter="untagged")
+    end
+
+    test "Published and Draft each narrow the list", %{conn: conn, site: site} do
+      {:ok, lv, html} = live(conn, ~p"/#{site.slug}/posts")
+      assert html =~ "Shipped it"
+      assert html =~ "Hello World"
+
+      html =
+        lv
+        |> element(~s(button[phx-click="switch_filter"][phx-value-filter="published"]))
+        |> render_click()
+
+      assert html =~ "Shipped it"
+      refute html =~ "Hello World"
+      assert_patch(lv, ~p"/#{site.slug}/posts?tag=published")
+
+      html =
+        lv
+        |> element(~s(button[phx-click="switch_filter"][phx-value-filter="draft"]))
+        |> render_click()
+
+      assert html =~ "Hello World"
+      refute html =~ "Shipped it"
+    end
+
+    test "a filter matching nothing keeps the illustration", %{conn: conn, site: site} do
+      {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/posts?tag=published")
+
+      html =
+        lv
+        |> form(~s(form[phx-change="search_list"]), %{"query" => "no-such-post"})
+        |> render_change()
+
+      assert html =~ "No posts match"
+      assert html =~ "empty-state-illustrated"
+      assert html =~ "empty-posts.svg"
+      assert html =~ "Clear filter"
+    end
+  end
 end

@@ -1,8 +1,11 @@
 defmodule Masthead.Uploads do
   import Ecto.Query
+  require Logger
+
   alias Masthead.Repo
-  alias Masthead.Uploads.Upload
   alias Masthead.Storage
+  alias Masthead.Uploads.{Thumbnail, Upload}
+  alias Masthead.Workers.PdfThumbnail
 
   @allowed_upload_types ~w(
     image/png image/jpeg image/gif image/webp image/svg+xml
@@ -36,9 +39,72 @@ defmodule Masthead.Uploads do
   def image?(content_type) when is_binary(content_type), do: content_type in @image_content_types
   def image?(_), do: false
 
-  def list_uploads(site_id) do
-    Repo.all(from u in Upload, where: u.site_id == ^site_id, order_by: [desc: u.inserted_at])
+  @doc """
+  URL of something we can show in an `<img>` for this upload: the file itself
+  when it's an image, its generated thumbnail when it has one, otherwise
+  `nil` — callers fall back to the filename/extension badge.
+
+  This is the single question the grid, the picker and the detail page ask.
+  Note it is deliberately *not* the same question as `image?/1`, which asks
+  whether the upload may be used as an image by a theme: a PDF has a preview
+  but is still not an image.
+  """
+  def preview_url(%Upload{} = upload) do
+    cond do
+      image?(upload) -> url(upload)
+      is_binary(upload.thumbnail_path) -> Storage.url(upload.thumbnail_path)
+      true -> nil
+    end
   end
+
+  @doc """
+  Site uploads, newest first.
+
+  Options:
+
+    * `:search` — case-insensitive match on the filename
+    * `:filter` — `:all` (default), `:images` (renders in an `<img>`) or
+      `:documents` (everything else — today that means PDFs)
+    * `:limit` — cap the number of rows returned
+
+  Uploads are mostly images, and a grid of them is expensive to load, so
+  the admin never renders an unbounded list: callers pass a `:limit` and
+  tell the user to search when the cap is hit. Callers that only resolve
+  a stored id to a filename still take the whole (small) list.
+
+  `inserted_at` has second resolution, so a bulk upload lands several rows
+  on the same timestamp — `id` breaks the tie to keep the cap stable
+  across reloads.
+  """
+  def list_uploads(site_id, opts \\ []) do
+    Upload
+    |> where([u], u.site_id == ^site_id)
+    |> search_uploads(Keyword.get(opts, :search))
+    |> filter_type(Keyword.get(opts, :filter, :all))
+    |> cap(Keyword.get(opts, :limit))
+    |> order_by([u], desc: u.inserted_at, desc: u.id)
+    |> Repo.all()
+  end
+
+  defp search_uploads(query, search) when is_binary(search) and search != "" do
+    from u in query, where: ilike(u.filename, ^"%#{search}%")
+  end
+
+  defp search_uploads(query, _search), do: query
+
+  defp filter_type(query, :images),
+    do: from(u in query, where: u.content_type in @image_content_types)
+
+  defp filter_type(query, :documents),
+    do: from(u in query, where: u.content_type not in @image_content_types)
+
+  defp filter_type(query, _all), do: query
+
+  @doc "The filter values `list_uploads/2` accepts, as `{value, label}` pairs."
+  def filter_options, do: [{:all, "All"}, {:images, "Images"}, {:documents, "Documents"}]
+
+  defp cap(query, limit) when is_integer(limit), do: limit(query, ^limit)
+  defp cap(query, _limit), do: query
 
   def get_upload!(site_id, id) do
     Repo.one!(from u in Upload, where: u.site_id == ^site_id and u.id == ^id)
@@ -86,6 +152,7 @@ defmodule Masthead.Uploads do
               path: rel
             })
             |> Repo.insert()
+            |> enqueue_thumbnail()
 
           {:error, reason} ->
             {:error, reason}
@@ -95,10 +162,70 @@ defmodule Masthead.Uploads do
 
   def delete_upload(%Upload{} = upload) do
     _ = Storage.delete(upload.path)
+    if upload.thumbnail_path, do: Storage.delete(upload.thumbnail_path)
     Repo.delete(upload)
   end
 
   def url(%Upload{path: path}), do: Storage.url(path)
+
+  @doc """
+  Site-agnostic fetch by id, preloading the site. Used by
+  `Masthead.Workers.PdfThumbnail`, which only carries an upload id and needs
+  the site slug to place the thumbnail. Returns `nil` when the row is gone.
+  """
+  def get_upload(id) do
+    Repo.one(from u in Upload, where: u.id == ^id, preload: :site)
+  end
+
+  @doc """
+  Renders and stores this upload's preview, then points the row at it.
+
+  Called by the worker, not by request code — see `Uploads.Thumbnail`.
+  """
+  def generate_thumbnail(%Upload{site: %{slug: slug}} = upload) do
+    case Thumbnail.generate(upload, slug) do
+      {:ok, thumbnail_path} ->
+        upload
+        |> Upload.changeset(%{thumbnail_path: thumbnail_path})
+        |> Repo.update()
+
+      {:error, _reason} = err ->
+        err
+    end
+  end
+
+  @doc """
+  Queues preview generation for every PDF that has no thumbnail yet. Used by
+  the `masthead.backfill_thumbnails` task for uploads predating the feature.
+  Returns the number of jobs queued.
+  """
+  def enqueue_missing_thumbnails do
+    Repo.all(
+      from u in Upload,
+        where: u.content_type == "application/pdf" and is_nil(u.thumbnail_path),
+        select: u.id
+    )
+    |> Enum.map(&%{upload_id: &1})
+    |> Enum.map(&PdfThumbnail.new/1)
+    |> Enum.map(&Oban.insert/1)
+    |> Enum.count(&match?({:ok, _}, &1))
+  end
+
+  # Previews are generated out of band: rasterizing user-supplied bytes has
+  # no place in the upload request. A queue failure must not fail the upload
+  # itself — the file is stored, it just shows a badge until backfilled.
+  defp enqueue_thumbnail({:ok, %Upload{} = upload} = result) do
+    if Thumbnail.thumbnailable?(upload) do
+      case %{upload_id: upload.id} |> PdfThumbnail.new() |> Oban.insert() do
+        {:ok, _job} -> :ok
+        {:error, reason} -> Logger.warning("could not queue thumbnail: #{inspect(reason)}")
+      end
+    end
+
+    result
+  end
+
+  defp enqueue_thumbnail(result), do: result
 
   defp allowed_upload?(content_type, filename) do
     content_type in @allowed_upload_types or

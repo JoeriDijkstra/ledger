@@ -58,12 +58,17 @@ defmodule MastheadWeb.AdminLive.PostIndex do
     assign(socket, :posts, posts)
   end
 
-  defp parse_filter(%{"tag" => "untagged"}), do: :untagged
+  # Status filters are atoms; anything else is a tag slug.
+  @status_filters ~w(published draft untagged)
+
+  defp parse_filter(%{"tag" => value}) when value in @status_filters,
+    do: String.to_existing_atom(value)
+
   defp parse_filter(%{"tag" => slug}) when is_binary(slug) and slug not in ["", "all"], do: slug
   defp parse_filter(_params), do: :all
 
   defp filter_param(:all), do: "all"
-  defp filter_param(:untagged), do: "untagged"
+  defp filter_param(atom) when is_atom(atom), do: Atom.to_string(atom)
   defp filter_param(slug) when is_binary(slug), do: slug
 
   # Build a `/posts` path carrying the active tag filter and search as query
@@ -81,9 +86,13 @@ defmodule MastheadWeb.AdminLive.PostIndex do
     if drop?.(value), do: params, else: Map.put(params, key, value)
   end
 
-  # The filter buttons: All, Untagged, then one per tag (value is the slug).
+  # Status filters always; the tag filters (Untagged + one per tag, value is
+  # the slug) only get appended once the site actually has tags.
+  defp filter_options([]), do: Content.status_filter_options()
+
   defp filter_options(tags) do
-    [{:all, "All"}, {:untagged, "Untagged"}] ++ Enum.map(tags, &{&1.slug, &1.name})
+    Content.status_filter_options() ++
+      [{:untagged, "Untagged"}] ++ Enum.map(tags, &{&1.slug, &1.name})
   end
 
   defp filtering?(tag_filter, search), do: tag_filter != :all or search != ""
@@ -120,7 +129,7 @@ defmodule MastheadWeb.AdminLive.PostIndex do
       </:actions>
 
       <.list_toolbar
-        :if={@tags != [] or @search != "" or @tag_filter != :all}
+        :if={@posts != [] or filtering?(@tag_filter, @search)}
         scope={:posts}
         filter={@tag_filter}
         options={filter_options(@tags)}
@@ -210,11 +219,14 @@ defmodule MastheadWeb.AdminLive.PostIndex do
         <.link navigate={~p"/#{@site.slug}/posts/new"} class="btn btn-primary">+ New post</.link>
       </div>
 
-      <div :if={@posts == [] and filtering?(@tag_filter, @search)} class="empty-state">
+      <div
+        :if={@posts == [] and filtering?(@tag_filter, @search)}
+        class="empty-state empty-state-illustrated"
+      >
+        <img src={~p"/images/illustrations/empty-posts.svg"} alt="" class="empty-illustration" />
         <h2>No posts match</h2>
-        <p>
-          No posts match this filter. <.link patch={~p"/#{@site.slug}/posts"}>Clear filter</.link>
-        </p>
+        <p>No posts match this filter.</p>
+        <.link patch={~p"/#{@site.slug}/posts"} class="btn">Clear filter</.link>
       </div>
     </.shell>
     """

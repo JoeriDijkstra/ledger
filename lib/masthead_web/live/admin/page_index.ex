@@ -8,7 +8,21 @@ defmodule MastheadWeb.AdminLive.PageIndex do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Realtime.subscribe(Realtime.content_topic(socket.assigns.site.id))
-    {:ok, load(socket)}
+
+    {:ok,
+     assign(socket,
+       status_filter: :all,
+       search: "",
+       page_title: "Pages — #{socket.assigns.site.name}"
+     )}
+  end
+
+  @impl true
+  def handle_params(params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(status_filter: parse_filter(params), search: params["q"] || "")
+     |> load()}
   end
 
   @impl true
@@ -16,6 +30,15 @@ defmodule MastheadWeb.AdminLive.PageIndex do
   def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
+  def handle_event("switch_filter", %{"filter" => filter}, socket) do
+    {:noreply, push_patch(socket, to: pages_path(socket, filter, socket.assigns.search))}
+  end
+
+  def handle_event("search_list", %{"query" => query}, socket) do
+    {:noreply,
+     push_patch(socket, to: pages_path(socket, filter_param(socket.assigns.status_filter), query))}
+  end
+
   def handle_event("delete", %{"id" => id}, socket) do
     page = Content.get_page!(socket.assigns.site.id, id)
     {:ok, _} = Content.delete_page(page)
@@ -27,9 +50,37 @@ defmodule MastheadWeb.AdminLive.PageIndex do
   end
 
   defp load(socket) do
-    pages = Content.list_pages(socket.assigns.site.id)
-    assign(socket, pages: pages, page_title: "Pages — #{socket.assigns.site.name}")
+    pages =
+      Content.list_pages(socket.assigns.site.id,
+        filter: socket.assigns.status_filter,
+        search: socket.assigns.search
+      )
+
+    assign(socket, pages: pages)
   end
+
+  # Keep the filter and search in the URL so they survive a reload and stay
+  # shareable, dropping each param when it's back at its default.
+  defp pages_path(socket, filter, query) do
+    params =
+      %{}
+      |> maybe_put("status", filter, &(&1 in [nil, "", "all"]))
+      |> maybe_put("q", query, &(&1 in [nil, ""]))
+
+    ~p"/#{socket.assigns.site.slug}/pages?#{params}"
+  end
+
+  defp maybe_put(params, key, value, drop?) do
+    if drop?.(value), do: params, else: Map.put(params, key, value)
+  end
+
+  defp parse_filter(%{"status" => "published"}), do: :published
+  defp parse_filter(%{"status" => "draft"}), do: :draft
+  defp parse_filter(_params), do: :all
+
+  defp filter_param(filter), do: Atom.to_string(filter)
+
+  defp filtering?(filter, search), do: filter != :all or search != ""
 
   defp format_label(%{format: "theme", template: t}) when is_binary(t),
     do: t |> String.replace(["-", "_"], " ") |> String.capitalize()
@@ -66,6 +117,17 @@ defmodule MastheadWeb.AdminLive.PageIndex do
           <span class="btn-add-label">New page</span>
         </.link>
       </:actions>
+
+      <.list_toolbar
+        :if={@pages != [] or filtering?(@status_filter, @search)}
+        scope={:pages}
+        filter={@status_filter}
+        options={Content.status_filter_options()}
+        search={@search}
+        placeholder="Search pages…"
+        limit={length(@pages)}
+        truncated?={false}
+      />
 
       <table :if={@pages != []} class="table table-cards">
         <thead>
@@ -120,13 +182,26 @@ defmodule MastheadWeb.AdminLive.PageIndex do
         </tbody>
       </table>
 
-      <div :if={@pages == []} class="empty-state empty-state-illustrated">
+      <div
+        :if={@pages == [] and not filtering?(@status_filter, @search)}
+        class="empty-state empty-state-illustrated"
+      >
         <img src={~p"/images/illustrations/empty-pages.svg"} alt="" class="empty-illustration" />
         <h2>No pages yet</h2>
         <p>
           Pages are standalone content such as About or Contact. Published pages appear in the site navigation.
         </p>
         <.link navigate={~p"/#{@site.slug}/pages/new"} class="btn btn-primary">+ New page</.link>
+      </div>
+
+      <div
+        :if={@pages == [] and filtering?(@status_filter, @search)}
+        class="empty-state empty-state-illustrated"
+      >
+        <img src={~p"/images/illustrations/empty-pages.svg"} alt="" class="empty-illustration" />
+        <h2>No pages match</h2>
+        <p>No pages match this filter.</p>
+        <.link patch={~p"/#{@site.slug}/pages"} class="btn">Clear filter</.link>
       </div>
     </.shell>
     """

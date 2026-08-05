@@ -405,10 +405,13 @@ defmodule MastheadWeb.AdminLive.Components do
   * typing in the search box sends `"search_list"` (debounced) with
     `scope` + `query`
 
+  The search input carries `data-shortcut="search"`, which is what
+  `app.js` focuses on Cmd/Ctrl+F instead of opening the browser's find bar.
+
   `scope` identifies which list the events belong to so a single pair of
   handlers can serve all three tabs.
   """
-  attr :scope, :atom, required: true, doc: ":users | :sites | :themes | :posts"
+  attr :scope, :atom, required: true, doc: ":users | :sites | :themes | :posts | :uploads"
   attr :filter, :any, required: true, doc: "the currently active filter value (atom or string)"
   attr :options, :list, required: true, doc: ~s(list of `{value, label}` filter buttons)
   attr :search, :string, default: "", doc: "the current search term"
@@ -441,6 +444,7 @@ defmodule MastheadWeb.AdminLive.Components do
             placeholder={@placeholder}
             phx-debounce="300"
             autocomplete="off"
+            data-shortcut="search"
           />
         </form>
       </div>

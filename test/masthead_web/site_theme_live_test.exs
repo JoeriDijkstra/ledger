@@ -222,6 +222,62 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     assert html =~ "Upload new"
   end
 
+  test "the picker loads only enough files to fill its 3x3 grid", %{conn: conn, site: site} do
+    for n <- 1..12, do: create_upload(site, "shot-#{n}.png")
+
+    {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
+
+    html =
+      lv
+      |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
+      |> render_click()
+
+    # Nine slots, less the "Upload new" card and the "No file" card.
+    assert picker_card_count(html) == 7
+    assert html =~ "Showing the first 7. Search to find more."
+    assert html =~ "No file"
+    assert html =~ "Upload new"
+  end
+
+  test "searching the picker reaches a file the capped grid left out", %{conn: conn, site: site} do
+    # Oldest upload, so a newest-first cap pushes it off the end.
+    needle = create_upload(site, "needle.png")
+    for n <- 1..12, do: create_upload(site, "shot-#{n}.png")
+
+    {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
+
+    html =
+      lv
+      |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
+      |> render_click()
+
+    refute html =~ "needle.png"
+
+    html = lv |> form(~s(form.picker-search), %{"query" => "needle"}) |> render_change()
+
+    assert html =~ "needle.png"
+    assert html =~ ~s(phx-value-id="#{needle.id}")
+    assert picker_card_count(html) == 1
+    refute html =~ "Showing the first"
+  end
+
+  test "the picker says when a search matches nothing", %{conn: conn, site: site} do
+    create_upload(site, "brand.png")
+
+    {:ok, lv, _html} = live(conn, ~p"/#{site.slug}/theme")
+
+    lv
+    |> element(~s(button[phx-click="open"][phx-value-meta="favicon"]))
+    |> render_click()
+
+    html = lv |> form(~s(form.picker-search), %{"query" => "no-such-file"}) |> render_change()
+
+    assert html =~ "No files match"
+    assert picker_card_count(html) == 0
+    # The upload path stays reachable from an empty result.
+    assert html =~ "Upload new"
+  end
+
   test "selecting an upload and saving persists its id as the token value", %{
     conn: conn,
     site: site
@@ -417,6 +473,11 @@ defmodule MastheadWeb.SiteThemeLiveTest do
     {:ok, _} = :zip.create(String.to_charlist(tmp), entries)
     tmp
   end
+
+  # Selectable file cards in the picker grid (excludes "No file" and
+  # "Upload new", which carry their own events).
+  defp picker_card_count(html),
+    do: html |> String.split(~s(phx-click="select")) |> length() |> Kernel.-(1)
 
   defp create_upload(site, filename) do
     tmp = Path.join(System.tmp_dir!(), "st-up-#{System.unique_integer([:positive])}.png")

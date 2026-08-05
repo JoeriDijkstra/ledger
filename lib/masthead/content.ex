@@ -41,8 +41,9 @@ defmodule Masthead.Content do
 
   Options:
 
-    * `:filter` — `:all` (default), `:untagged`, or a tag slug (string) to
-      keep only posts carrying that tag.
+    * `:filter` — `:all` (default), `:published`, `:draft`, `:untagged`, or
+      a tag slug (string) to keep only posts carrying that tag. One value,
+      not a combination: the toolbar is a single-select row of buttons.
     * `:search` — a string matched (ILIKE) against the post title.
   """
   def list_posts(site_id, opts \\ []) do
@@ -57,6 +58,12 @@ defmodule Masthead.Content do
   end
 
   defp apply_post_filter(query, :all), do: query
+
+  defp apply_post_filter(query, :published),
+    do: from(p in query, where: p.published == true)
+
+  defp apply_post_filter(query, :draft),
+    do: from(p in query, where: p.published == false)
 
   defp apply_post_filter(query, :untagged) do
     from p in query,
@@ -243,9 +250,38 @@ defmodule Masthead.Content do
 
   # ---- Pages ----
 
-  def list_pages(site_id) do
-    Repo.all(from p in Page, where: p.site_id == ^site_id, order_by: p.title)
+  @doc """
+  Lists a site's pages, by title.
+
+  Options:
+
+    * `:filter` — `:all` (default), `:published` or `:draft`. Pages carry no
+      tags, so the status filters are the whole set.
+    * `:search` — a string matched (ILIKE) against the page title.
+  """
+  def list_pages(site_id, opts \\ []) do
+    from(p in Page, where: p.site_id == ^site_id, order_by: p.title)
+    |> apply_page_filter(Keyword.get(opts, :filter, :all))
+    |> apply_page_search(Keyword.get(opts, :search))
+    |> Repo.all()
   end
+
+  defp apply_page_filter(query, :published), do: from(p in query, where: p.published == true)
+  defp apply_page_filter(query, :draft), do: from(p in query, where: p.published == false)
+  defp apply_page_filter(query, _all), do: query
+
+  defp apply_page_search(query, search) when is_binary(search) and search != "" do
+    from p in query, where: ilike(p.title, ^"%#{search}%")
+  end
+
+  defp apply_page_search(query, _search), do: query
+
+  @doc """
+  The status filters the posts and pages toolbars share, as `{value, label}`
+  pairs. `PostIndex` appends its tag filters after these.
+  """
+  def status_filter_options,
+    do: [{:all, "All"}, {:published, "Published"}, {:draft, "Draft"}]
 
   def list_published_pages(site_id) do
     Repo.all(
