@@ -30,9 +30,22 @@ defmodule MastheadWeb.AdminLive.FilePicker do
 
   alias Masthead.Uploads
 
+  # The grid is a fixed 3x3. The "Upload new" card always takes a slot, and
+  # the optional "No file" card takes another, so the number of *files* we
+  # load is whatever is left. Images are heavy — past that, the user searches.
+  @grid_slots 9
+
   @impl true
   def mount(socket) do
-    {:ok, assign(socket, open?: false, view: :grid, files: [], context: %{}, ready?: false)}
+    {:ok,
+     assign(socket,
+       open?: false,
+       view: :grid,
+       files: [],
+       search: "",
+       context: %{},
+       ready?: false
+     )}
   end
 
   @impl true
@@ -64,7 +77,13 @@ defmodule MastheadWeb.AdminLive.FilePicker do
   @impl true
   def handle_event("open", params, socket) do
     {:noreply,
-     assign(socket, open?: true, view: :grid, context: params, files: list_files(socket.assigns))}
+     socket
+     |> assign(open?: true, view: :grid, context: params, search: "")
+     |> load_files()}
+  end
+
+  def handle_event("search", %{"query" => query}, socket) do
+    {:noreply, socket |> assign(search: query) |> load_files()}
   end
 
   def handle_event("close", _params, socket), do: {:noreply, close(socket)}
@@ -113,10 +132,23 @@ defmodule MastheadWeb.AdminLive.FilePicker do
     close(socket)
   end
 
-  defp list_files(%{images_only: true, site: site}),
-    do: site.id |> Uploads.list_uploads() |> Enum.filter(&Uploads.image?/1)
+  defp load_files(socket) do
+    %{site: site, images_only: images_only, search: search} = socket.assigns
 
-  defp list_files(%{site: site}), do: Uploads.list_uploads(site.id)
+    files =
+      Uploads.list_uploads(site.id,
+        search: search,
+        filter: if(images_only, do: :images, else: :all),
+        limit: file_limit(socket.assigns.clearable)
+      )
+
+    assign(socket, files: files)
+  end
+
+  # Leave a slot for "Upload new", and one more for "No file" when the
+  # parent asked for it, so the grid stays exactly 3x3 either way.
+  defp file_limit(true), do: @grid_slots - 2
+  defp file_limit(_clearable), do: @grid_slots - 1
 
   defp close(socket), do: socket |> assign(open?: false, view: :grid) |> cancel_all()
 
@@ -174,6 +206,22 @@ defmodule MastheadWeb.AdminLive.FilePicker do
           </header>
 
           <div :if={@view == :grid} class="dialog-body">
+            <form
+              :if={@files != [] or @search != ""}
+              phx-change="search"
+              phx-target={@myself}
+              class="picker-search"
+            >
+              <input
+                type="search"
+                name="query"
+                value={@search}
+                placeholder="Search files…"
+                phx-debounce="300"
+                autocomplete="off"
+              />
+            </form>
+
             <ul class="picker-grid">
               <li :if={@clearable}>
                 <button
@@ -197,8 +245,10 @@ defmodule MastheadWeb.AdminLive.FilePicker do
                   phx-target={@myself}
                 >
                   <span class="picker-thumb">
-                    <img :if={Uploads.image?(u)} src={Uploads.url(u)} alt={u.filename} />
-                    <span :if={not Uploads.image?(u)} class="file-badge">{file_ext(u.filename)}</span>
+                    <img :if={Uploads.preview_url(u)} src={Uploads.preview_url(u)} alt={u.filename} />
+                    <span :if={is_nil(Uploads.preview_url(u))} class="file-badge">
+                      {file_ext(u.filename)}
+                    </span>
                   </span>
                   <span class="picker-name" title={u.filename}>{u.filename}</span>
                 </button>
@@ -217,6 +267,13 @@ defmodule MastheadWeb.AdminLive.FilePicker do
                 </button>
               </li>
             </ul>
+
+            <p :if={length(@files) == file_limit(@clearable)} class="picker-hint">
+              Showing the first {file_limit(@clearable)}. Search to find more.
+            </p>
+            <p :if={@files == [] and @search != ""} class="picker-hint">
+              No files match “{@search}”.
+            </p>
           </div>
 
           <form

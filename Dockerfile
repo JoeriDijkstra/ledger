@@ -77,8 +77,11 @@ RUN mix release
 # the compiled release and other runtime necessities
 FROM ${RUNNER_IMAGE} AS final
 
+# poppler-utils provides pdftoppm, which renders page 1 of a PDF upload into
+# the preview thumbnail shown in the uploads grid (Masthead.Uploads.Thumbnail).
+# Without it the app still runs — PDFs just keep showing a file badge.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates poppler-utils \
   && rm -rf /var/lib/apt/lists/*
 
 # Set the locale

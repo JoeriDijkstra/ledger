@@ -101,9 +101,10 @@ function wirePasswordConfirm(form) {
 document.querySelectorAll("form[data-confirm-password]").forEach(wirePasswordConfirm)
 
 // Keyboard shortcuts. Pages opt in by adding data-shortcut="save",
-// "publish", or "new" to the relevant button/link.
+// "publish", "new", or "search" to the relevant element.
 //   - Cmd/Ctrl+S        → save
 //   - Cmd/Ctrl+Shift+S  → publish (falls back to save if absent)
+//   - Cmd/Ctrl+F        → focus the list's search box (browser find otherwise)
 //   - c (no modifier)   → new (ignored while typing in an input)
 function isEditableTarget(el) {
   if (!el) return false
@@ -121,6 +122,17 @@ window.addEventListener("keydown", e => {
     if (!target) return
     e.preventDefault()
     target.click()
+    return
+  }
+
+  // Only hijack find on pages that actually have a search box — everywhere
+  // else Cmd/Ctrl+F must still open the browser's own find bar.
+  if (mod && (e.key === "f" || e.key === "F")) {
+    const target = document.querySelector("[data-shortcut='search']")
+    if (!target) return
+    e.preventDefault()
+    target.focus()
+    target.select()
     return
   }
 

@@ -107,7 +107,9 @@ config :tesla, adapter: Tesla.Adapter.Hackney
 
 config :masthead, Oban,
   repo: Masthead.Repo,
-  queues: [mailers: 10, maintenance: 5],
+  # `thumbnails` is deliberately narrow: each job forks pdftoppm, so the
+  # concurrency here is a cap on simultaneous rasterizer subprocesses.
+  queues: [mailers: 10, maintenance: 5, thumbnails: 2],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     {Oban.Plugins.Cron,

@@ -115,7 +115,28 @@ defmodule MastheadWeb.AdminLive.UploadShow do
       <div class="upload-show">
         <div class="upload-preview">
           <img :if={Uploads.image?(@upload)} src={@url} alt={@upload.filename} />
-          <span :if={not Uploads.image?(@upload)} class="file-badge file-badge-lg">
+          <%!-- <object>, not <iframe>: browsers without a built-in PDF viewer
+               (notably iOS Safari, which renders only page 1 in a frame) fall
+               back to the child content instead of showing a blank box. --%>
+          <object
+            :if={pdf?(@upload)}
+            data={@url}
+            type="application/pdf"
+            class="pdf-viewer"
+            aria-label={@upload.filename}
+          >
+            <div class="pdf-fallback">
+              <span class="file-badge file-badge-lg">{file_ext(@upload.filename)}</span>
+              <p class="muted">Your browser can't display this PDF inline.</p>
+              <a href={@url} target="_blank" rel="noopener" class="btn btn-primary">
+                Open in a new tab
+              </a>
+            </div>
+          </object>
+          <span
+            :if={not Uploads.image?(@upload) and not pdf?(@upload)}
+            class="file-badge file-badge-lg"
+          >
             {file_ext(@upload.filename)}
           </span>
         </div>
@@ -235,6 +256,9 @@ defmodule MastheadWeb.AdminLive.UploadShow do
   defp format_bytes(b) when b < 1024, do: "#{b} B"
   defp format_bytes(b) when b < 1024 * 1024, do: "#{Float.round(b / 1024, 1)} KB"
   defp format_bytes(b), do: "#{Float.round(b / 1024 / 1024, 1)} MB"
+
+  defp pdf?(%{content_type: "application/pdf"}), do: true
+  defp pdf?(_upload), do: false
 
   defp file_ext(filename) do
     filename |> Path.extname() |> String.trim_leading(".") |> String.upcase()

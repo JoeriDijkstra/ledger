@@ -5,6 +5,10 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
   import MastheadWeb.AdminLive.Components
   alias Masthead.Uploads
 
+  # Three rows of six on a wide screen. Images are heavy, so the grid is
+  # capped rather than paginated — past the cap the user searches.
+  defp list_limit, do: 18
+
   @impl true
   def mount(_params, _session, socket) do
     {:ok,
@@ -12,9 +16,10 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
      |> assign(
        page_title: "Uploads — #{socket.assigns.site.name}",
        modal_open?: false,
-       renamed_names: %{}
+       renamed_names: %{},
+       search: "",
+       type_filter: :all
      )
-     |> assign(uploads_list: Uploads.list_uploads(socket.assigns.site.id))
      |> allow_upload(:image,
        accept: ~w(.png .jpg .jpeg .gif .webp .svg .ico .pdf),
        max_entries: 8,
@@ -23,6 +28,22 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
   end
 
   @impl true
+  def handle_params(params, _uri, socket) do
+    {:noreply,
+     socket
+     |> assign(search: params["q"] || "", type_filter: parse_filter(params))
+     |> reload_uploads()}
+  end
+
+  @impl true
+  def handle_event("search_list", %{"query" => query}, socket) do
+    {:noreply, push_patch(socket, to: uploads_path(socket, socket.assigns.type_filter, query))}
+  end
+
+  def handle_event("switch_filter", %{"filter" => filter}, socket) do
+    {:noreply, push_patch(socket, to: uploads_path(socket, filter, socket.assigns.search))}
+  end
+
   def handle_event("open_modal", _params, socket) do
     {:noreply, assign(socket, modal_open?: true)}
   end
@@ -63,17 +84,46 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
     {:noreply,
      socket
      |> put_flash(:info, flash_msg)
-     |> assign(
-       uploads_list: Uploads.list_uploads(socket.assigns.site.id),
-       modal_open?: stored > 0,
-       renamed_names: %{}
-     )
+     |> assign(modal_open?: stored > 0, renamed_names: %{})
+     |> reload_uploads()
      |> maybe_close_modal(stored)}
   end
 
   def handle_event("cancel", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :image, ref)}
   end
+
+  defp reload_uploads(socket) do
+    uploads =
+      Uploads.list_uploads(socket.assigns.site.id,
+        search: socket.assigns.search,
+        filter: socket.assigns.type_filter,
+        limit: list_limit()
+      )
+
+    assign(socket, uploads_list: uploads)
+  end
+
+  # Keep the filter and search in the URL so they survive a reload and stay
+  # shareable, dropping each param when it's back at its default.
+  defp uploads_path(socket, filter, query) do
+    params =
+      %{}
+      |> maybe_put("type", to_string(filter), &(&1 in ["", "all"]))
+      |> maybe_put("q", query, &(&1 in [nil, ""]))
+
+    ~p"/#{socket.assigns.site.slug}/uploads?#{params}"
+  end
+
+  defp maybe_put(params, key, value, drop?) do
+    if drop?.(value), do: params, else: Map.put(params, key, value)
+  end
+
+  defp parse_filter(%{"type" => "images"}), do: :images
+  defp parse_filter(%{"type" => "documents"}), do: :documents
+  defp parse_filter(_params), do: :all
+
+  defp filtering?(filter, search), do: filter != :all or search != ""
 
   defp maybe_close_modal(socket, 0), do: socket
   defp maybe_close_modal(socket, _), do: assign(socket, modal_open?: false)
@@ -116,19 +166,45 @@ defmodule MastheadWeb.AdminLive.UploadIndex do
         </button>
       </:actions>
 
-      <div :if={@uploads_list == []} class="empty-state empty-state-illustrated">
+      <.list_toolbar
+        :if={@uploads_list != [] or filtering?(@type_filter, @search)}
+        scope={:uploads}
+        filter={@type_filter}
+        options={Uploads.filter_options()}
+        search={@search}
+        placeholder="Search uploads…"
+        limit={list_limit()}
+        truncated?={length(@uploads_list) == list_limit()}
+      />
+
+      <div
+        :if={@uploads_list == [] and not filtering?(@type_filter, @search)}
+        class="empty-state empty-state-illustrated"
+      >
         <img src={~p"/images/illustrations/empty-uploads.svg"} alt="" class="empty-illustration" />
         <h2>Nothing uploaded yet</h2>
         <p>Upload an image to embed it in posts and pages using Markdown or HTML snippets.</p>
         <button type="button" phx-click="open_modal" class="btn btn-primary">+ New upload</button>
       </div>
 
+      <div
+        :if={@uploads_list == [] and filtering?(@type_filter, @search)}
+        class="empty-state empty-state-illustrated"
+      >
+        <img src={~p"/images/illustrations/empty-uploads.svg"} alt="" class="empty-illustration" />
+        <h2>No uploads match</h2>
+        <p>No uploads match this filter.</p>
+        <.link patch={~p"/#{@site.slug}/uploads"} class="btn">Clear filter</.link>
+      </div>
+
       <ul :if={@uploads_list != []} class="upload-grid">
         <li :for={u <- @uploads_list}>
           <.link navigate={~p"/#{@site.slug}/uploads/#{u.id}"} class="upload-card">
             <div class="upload-thumb">
-              <img :if={Uploads.image?(u)} src={Masthead.Uploads.url(u)} alt={u.filename} />
-              <span :if={not Uploads.image?(u)} class="file-badge">{file_ext(u.filename)}</span>
+              <img :if={Uploads.preview_url(u)} src={Uploads.preview_url(u)} alt={u.filename} />
+              <span :if={is_nil(Uploads.preview_url(u))} class="file-badge">
+                {file_ext(u.filename)}
+              </span>
             </div>
             <div class="upload-meta">
               <div class="filename" title={u.filename}>{u.filename}</div>

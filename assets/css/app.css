@@ -2476,15 +2476,46 @@ button.danger:hover { filter: brightness(0.92); }
   flex-direction: column;
   gap: 1.25rem;
 }
+/* Fixed 3 columns: the picker loads exactly enough cards to fill 3 rows,
+   so the grid should not reflow into a different column count.
+   `minmax(0, 1fr)` — not a bare `1fr`, whose `auto` minimum is min-content:
+   .picker-name is nowrap, so a long filename would widen its track and push
+   the grid past the dialog (and, via the thumb's aspect-ratio, make every
+   card taller). A zero minimum lets the name ellipsize as intended. */
 .picker-grid {
   list-style: none;
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 .picker-grid li { display: block; }
+/* .dialog-body is a flex column with its own gap — no margins here, or the
+   search box and hint get spaced twice. */
+.picker-search { margin: 0; }
+/* The dialog surface is already --card, so the input takes --bg to stay
+   distinguishable (the reverse of .admin-search out on the page). */
+.picker-search input[type="search"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  background: var(--bg);
+  color: var(--fg);
+}
+.picker-search input[type="search"]::placeholder { color: var(--muted); }
+.picker-search input[type="search"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.picker-hint { margin: 0; font-size: 0.8rem; color: var(--muted); }
+@media (max-width: 500px) {
+  .picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .picker-card {
   position: relative;
   display: block;
@@ -2569,6 +2600,27 @@ button.danger:hover { filter: brightness(0.92); }
   border-radius: 6px;
   display: block;
 }
+/* The browser's own PDF viewer. It needs an explicit height — an <object>
+   has no intrinsic size, so without one it collapses to nothing. */
+.pdf-viewer {
+  width: 100%;
+  height: 75vh;
+  min-height: 24rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg);
+}
+/* Shown only when the browser can't render the PDF, as <object> child
+   content — so this is the no-viewer path, not a second preview. */
+.pdf-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1rem;
+  text-align: center;
+}
+.pdf-fallback p { margin: 0; }
 .upload-side {
   display: flex;
   flex-direction: column;
