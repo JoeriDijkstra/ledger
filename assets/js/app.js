@@ -30,6 +30,7 @@ import {BadgePulse} from "./hooks/badge_pulse"
 import {SaveShortcut} from "./hooks/save_shortcut"
 import {SortableList} from "./hooks/sortable_list"
 import {ImageCompress} from "./hooks/image_compress"
+import {CommandPalette} from "./hooks/command_palette"
 
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
@@ -43,6 +44,7 @@ const liveSocket = new LiveSocket("/live", Socket, {
     SaveShortcut,
     SortableList,
     ImageCompress,
+    CommandPalette,
   },
 })
 
@@ -105,6 +107,7 @@ document.querySelectorAll("form[data-confirm-password]").forEach(wirePasswordCon
 //   - Cmd/Ctrl+S        → save
 //   - Cmd/Ctrl+Shift+S  → publish (falls back to save if absent)
 //   - Cmd/Ctrl+F        → focus the list's search box (browser find otherwise)
+//   - Cmd/Ctrl+K        → open the command palette
 //   - c (no modifier)   → new (ignored while typing in an input)
 function isEditableTarget(el) {
   if (!el) return false
@@ -119,6 +122,14 @@ window.addEventListener("keydown", e => {
     const target =
       (e.shiftKey && document.querySelector("[data-shortcut='publish']")) ||
       document.querySelector("[data-shortcut='save']")
+    if (!target) return
+    e.preventDefault()
+    target.click()
+    return
+  }
+
+  if (mod && (e.key === "k" || e.key === "K")) {
+    const target = document.querySelector("[data-shortcut='palette']")
     if (!target) return
     e.preventDefault()
     target.click()

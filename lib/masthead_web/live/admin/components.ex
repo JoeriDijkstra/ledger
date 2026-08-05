@@ -219,6 +219,15 @@ defmodule MastheadWeb.AdminLive.Components do
 
         {render_slot(@inner_block)}
       </main>
+
+      <%!-- Site-scoped, so it only exists where there is content to search.
+            Self-contained: no host LiveView wiring needed. --%>
+      <.live_component
+        :if={@site}
+        module={MastheadWeb.AdminLive.CommandPalette}
+        id="command-palette"
+        site={@site}
+      />
     </div>
     """
   end
