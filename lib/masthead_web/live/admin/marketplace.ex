@@ -37,6 +37,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
        # browse
        filter: :all,
        search: "",
+       visibility: :all,
        installed: MapSet.new(),
        install_site: nil,
        # my themes
@@ -100,8 +101,8 @@ defmodule MastheadWeb.AdminLive.Marketplace do
 
   # Load the grid for the active filter: the user's own themes for "My themes",
   # published themes from others for everything else.
-  defp load_themes(%{assigns: %{filter: :mine, current_user: user}} = socket) do
-    assign(socket, themes: Themes.list_themes(user.id))
+  defp load_themes(%{assigns: %{filter: :mine} = a} = socket) do
+    assign(socket, themes: Themes.list_themes(a.current_user.id, a.search, a.visibility))
   end
 
   defp load_themes(%{assigns: a} = socket) do
@@ -132,6 +133,10 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
     {:noreply, socket |> assign(search: query) |> load_themes()}
+  end
+
+  def handle_event("visibility", %{"visibility" => value}, socket) do
+    {:noreply, socket |> assign(visibility: to_visibility(value)) |> load_themes()}
   end
 
   # ---- install / uninstall onto the site in context ----
@@ -222,6 +227,11 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   end
 
   # ---- browse helpers ----
+
+  # Never String.to_atom on a form value.
+  defp to_visibility("public"), do: :public
+  defp to_visibility("private"), do: :private
+  defp to_visibility(_all), do: :all
 
   defp first_image(%{images: [image | _]}), do: image
   defp first_image(_), do: nil
@@ -467,16 +477,26 @@ defmodule MastheadWeb.AdminLive.Marketplace do
               {label}
             </.link>
           </div>
-          <form :if={@filter != :mine} phx-change="search" class="admin-search">
-            <input
-              type="search"
-              name="query"
-              value={@search}
-              placeholder="Search themes…"
-              phx-debounce="300"
-              autocomplete="off"
-            />
-          </form>
+          <div class="admin-toolbar-controls">
+            <form :if={@filter == :mine} phx-change="visibility" class="visibility-filter">
+              <select name="visibility" aria-label="Filter by visibility">
+                <option value="all" selected={@visibility == :all}>All themes</option>
+                <option value="public" selected={@visibility == :public}>Public</option>
+                <option value="private" selected={@visibility == :private}>Private</option>
+              </select>
+            </form>
+            <form phx-change="search" class="admin-search">
+              <input
+                type="search"
+                name="query"
+                value={@search}
+                placeholder="Search themes…"
+                phx-debounce="300"
+                autocomplete="off"
+                data-shortcut="search"
+              />
+            </form>
+          </div>
         </div>
       </div>
 
@@ -541,6 +561,9 @@ defmodule MastheadWeb.AdminLive.Marketplace do
             <div class="marketplace-card-meta">
               <div class="marketplace-card-id">
                 <h3><.link navigate={theme_path(t, @install_site)}>{t.name}</.link></h3>
+                <p :if={t.description not in [nil, ""]} class="marketplace-card-desc">
+                  {t.description}
+                </p>
               </div>
               <div class="marketplace-card-actions">
                 <.install_button theme={t} installed={@installed} install_site={@install_site} />
@@ -558,7 +581,13 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   defp my_themes_body(assigns) do
     ~H"""
     <div>
-      <div :if={@themes == []} class="empty-state">
+      <div :if={@themes == [] and @search != ""} class="empty-state">
+        <img src={~p"/images/illustrations/empty-themes.svg"} alt="" class="empty-illustration" />
+        <h2>Nothing here yet</h2>
+        <p>No themes match "{@search}".</p>
+      </div>
+
+      <div :if={@themes == [] and @search == ""} class="empty-state">
         <img src={~p"/images/illustrations/empty-themes.svg"} alt="" class="empty-illustration" />
         <h2>No themes yet</h2>
         <p>Upload a Liquid theme package to get started.</p>
@@ -597,6 +626,9 @@ defmodule MastheadWeb.AdminLive.Marketplace do
             <div class="marketplace-card-meta">
               <div class="marketplace-card-id">
                 <h3><.link navigate={theme_path(t, @install_site)}>{t.name}</.link></h3>
+                <p :if={t.description not in [nil, ""]} class="marketplace-card-desc">
+                  {t.description}
+                </p>
               </div>
               <div class="marketplace-card-actions">
                 <.install_button theme={t} installed={@installed} install_site={@install_site} />

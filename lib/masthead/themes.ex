@@ -31,16 +31,24 @@ defmodule Masthead.Themes do
   only built-in (Default) is installed on every site already, so it's not
   listed here. Installing onto a site is separate — see `list_themes_for_site/1`.
   """
-  def list_themes(user_id) when is_integer(user_id) do
-    Repo.all(
-      from t in Theme,
-        where: t.owner_id == ^user_id,
-        order_by: ^theme_order(),
-        preload: [:images]
+  def list_themes(user_id, search \\ nil, visibility \\ :all)
+
+  def list_themes(user_id, search, visibility) when is_integer(user_id) do
+    from(t in Theme,
+      where: t.owner_id == ^user_id,
+      order_by: ^theme_order(),
+      preload: [:images]
     )
+    |> apply_visibility(visibility)
+    |> apply_search(search)
+    |> Repo.all()
   end
 
-  def list_themes(nil), do: []
+  def list_themes(nil, _search, _visibility), do: []
+
+  defp apply_visibility(query, :public), do: from(t in query, where: t.public == true)
+  defp apply_visibility(query, :private), do: from(t in query, where: t.public == false)
+  defp apply_visibility(query, _all), do: query
 
   @doc """
   Themes a site can select as its active theme: all built-ins (Default)
@@ -442,9 +450,12 @@ defmodule Masthead.Themes do
     end
   end
 
+  # Descriptions are searchable too — a theme's name rarely says what it is
+  # for ("Interstellar"), and its description is where the author says so.
   defp apply_search(query, search_query) do
     if search_query && search_query != "" do
-      from t in query, where: ilike(t.name, ^"%#{search_query}%")
+      term = "%#{search_query}%"
+      from t in query, where: ilike(t.name, ^term) or ilike(t.description, ^term)
     else
       query
     end

@@ -78,6 +78,10 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
     {:noreply, assign(socket, index: String.to_integer(index))}
   end
 
+  def handle_event("gallery_key", %{"key" => key}, socket) do
+    {:noreply, assign(socket, index: step_index(socket.assigns, key))}
+  end
+
   # ---- install ----
 
   def handle_event("filter_sites", %{"site" => query}, socket) do
@@ -360,6 +364,24 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
     {:ok, :ok}
   end
 
+  # Arrow keys walk the gallery from anywhere on the page, wrapping at both
+  # ends — except while a text field is open, where the arrows belong to the
+  # caret. Those are the only places on this page you can be typing.
+  defp step_index(%{index: index} = assigns, key) do
+    if typing?(assigns), do: index, else: stepped(assigns, key)
+  end
+
+  defp typing?(%{editing?: editing?, open?: open?, adding_link?: adding_link?}),
+    do: editing? or open? or adding_link?
+
+  defp stepped(%{images: images, index: index}, "ArrowRight") when images != [],
+    do: rem(index + 1, length(images))
+
+  defp stepped(%{images: images, index: index}, "ArrowLeft") when images != [],
+    do: rem(index + length(images) - 1, length(images))
+
+  defp stepped(%{index: index}, _key), do: index
+
   defp editable(%{assigns: %{editable?: editable?}}), do: editable?
 
   # Built-ins are maintained by the platform, not editable from here.
@@ -433,7 +455,7 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
 
       <div class="theme-detail">
         <div class="theme-detail-main">
-          <figure class="theme-preview">
+          <figure class="theme-preview" phx-window-keydown="gallery_key">
             <figcaption class="theme-preview-chrome">
               <span class="theme-preview-dots" aria-hidden="true"><i></i><i></i><i></i></span>
               <span :if={@images != []} class="theme-preview-count">
