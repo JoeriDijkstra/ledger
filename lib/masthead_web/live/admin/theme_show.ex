@@ -28,7 +28,7 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
     theme = Themes.get_theme!(id) |> Masthead.Repo.preload(:owner)
     user = socket.assigns.current_user
 
-    if theme.public or theme.owner_id == user.id or user.admin do
+    if visible?(theme, user) do
       {:ok,
        socket
        |> assign(
@@ -40,7 +40,7 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
          adding_link?: false,
          author: author(theme),
          index: 0,
-         sites: Sites.list_sites_for_user(user.id),
+         sites: sites_for(user),
          site: nil,
          installed?: false,
          query: "",
@@ -384,7 +384,17 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
 
   defp editable(%{assigns: %{editable?: editable?}}), do: editable?
 
+  # A published listing is public — that's the point of the marketplace. An
+  # unpublished one is only its author's (or a platform admin's) to see.
+  defp visible?(%{public: true}, _user), do: true
+  defp visible?(_theme, nil), do: false
+  defp visible?(theme, user), do: theme.owner_id == user.id or user.admin
+
+  defp sites_for(nil), do: []
+  defp sites_for(user), do: Sites.list_sites_for_user(user.id)
+
   # Built-ins are maintained by the platform, not editable from here.
+  defp editable?(_theme, nil), do: false
   defp editable?(%{source: "uploaded"} = theme, user), do: theme.owner_id == user.id or user.admin
   defp editable?(_theme, _user), do: false
 
@@ -440,10 +450,12 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
   @impl true
   def render(assigns) do
     ~H"""
-    <.shell title={@theme.name} current_user={@current_user} flash={@flash} active={:marketplace}>
+    <.marketplace_shell title={@theme.name} current_user={@current_user} flash={@flash}>
       <:title_meta>
         <span class="chip chip-accent theme-card-version">v{@theme.version}</span>
-        <.theme_status theme={@theme} />
+        <%!-- Public/private is the author's own bookkeeping — a visitor only
+              ever reaches published listings, so the chip tells them nothing. --%>
+        <.theme_status :if={@current_user} theme={@theme} />
         <.theme_badge theme={@theme} />
       </:title_meta>
       <:actions>
@@ -586,7 +598,16 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
         <aside class="theme-detail-aside">
           <section class="install-card">
             <h2>Install this theme</h2>
-            <p :if={@sites == []} class="muted">
+            <p :if={is_nil(@current_user)} class="muted">
+              Themes install onto a Masthead site
+            </p>
+            <.link :if={is_nil(@current_user)} href={~p"/signup"} class="btn btn-primary btn-block">
+              Create your site
+            </.link>
+            <p :if={is_nil(@current_user)} class="install-card-next">
+              Already have one? <.link href={~p"/login"}>Log in</.link>
+            </p>
+            <p :if={@current_user && @sites == []} class="muted">
               You don't have any sites yet. <.link navigate={~p"/sites"}>Create one</.link> first.
             </p>
 
@@ -759,7 +780,7 @@ defmodule MastheadWeb.AdminLive.ThemeShow do
       </div>
 
       <.manage_dialog :if={@managing?} theme={@theme} />
-    </.shell>
+    </.marketplace_shell>
     """
   end
 

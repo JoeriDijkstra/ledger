@@ -3,6 +3,8 @@ defmodule MastheadWeb.AdminLive.Components do
   use Phoenix.Component
   use MastheadWeb, :verified_routes
 
+  import MastheadWeb.MarketingComponents
+
   alias Masthead.Accounts.User
   alias Masthead.Actions
   alias Phoenix.LiveView.JS
@@ -180,28 +182,7 @@ defmodule MastheadWeb.AdminLive.Components do
       <main class="admin-content">
         <.unconfirmed_banner :if={@current_user} user={@current_user} />
 
-        <div class="flash-toasts" aria-live="polite">
-          <div
-            :if={Phoenix.Flash.get(@flash, :info)}
-            id="toast-info"
-            class="flash-toast flash-toast-info"
-            phx-hook="FlashToast"
-            data-key="info"
-            role="status"
-          >
-            {Phoenix.Flash.get(@flash, :info)}
-          </div>
-          <div
-            :if={Phoenix.Flash.get(@flash, :error)}
-            id="toast-error"
-            class="flash-toast flash-toast-error"
-            phx-hook="FlashToast"
-            data-key="error"
-            role="alert"
-          >
-            {Phoenix.Flash.get(@flash, :error)}
-          </div>
-        </div>
+        <.flash_toasts flash={@flash} />
 
         <div
           :if={@title || @actions != [] || @title_meta != [] || @present_users != []}
@@ -228,6 +209,88 @@ defmodule MastheadWeb.AdminLive.Components do
         id="command-palette"
         site={@site}
       />
+    </div>
+    """
+  end
+
+  attr :title, :string, default: nil
+  attr :current_user, :map, default: nil
+  attr :flash, :map, default: %{}
+  attr :active, :atom, default: nil
+  slot :inner_block, required: true
+  slot :actions
+  slot :title_meta
+
+  @doc """
+  Chrome for the marketplace, the one page that serves signed-in users and
+  visitors alike. The body is the same either way; only the frame differs —
+  the admin sidebar for a member, the homepage's nav and footer for a
+  visitor, so arriving from the front page doesn't feel like a different site.
+  """
+  def marketplace_shell(%{current_user: nil} = assigns), do: public_shell(assigns)
+
+  def marketplace_shell(assigns) do
+    ~H"""
+    <.shell title={@title} current_user={@current_user} flash={@flash} active={:marketplace}>
+      <:title_meta>{render_slot(@title_meta)}</:title_meta>
+      <:actions>{render_slot(@actions)}</:actions>
+      {render_slot(@inner_block)}
+    </.shell>
+    """
+  end
+
+  defp public_shell(assigns) do
+    ~H"""
+    <div class="public-shell">
+      <.marketing_nav active={:marketplace} />
+
+      <main class="public-content">
+        <.flash_toasts flash={@flash} />
+
+        <div :if={@title || @actions != [] || @title_meta != []} class="page-head">
+          <div class="page-head-title">
+            <h1 :if={@title}>{@title}</h1>
+            {render_slot(@title_meta)}
+          </div>
+          <div class="actions">
+            {render_slot(@actions)}
+          </div>
+        </div>
+
+        {render_slot(@inner_block)}
+      </main>
+
+      <.marketing_footer />
+    </div>
+    """
+  end
+
+  attr :flash, :map, required: true
+
+  @doc "Transient info/error toasts. Both shells show them the same way."
+  def flash_toasts(assigns) do
+    ~H"""
+    <div class="flash-toasts" aria-live="polite">
+      <div
+        :if={Phoenix.Flash.get(@flash, :info)}
+        id="toast-info"
+        class="flash-toast flash-toast-info"
+        phx-hook="FlashToast"
+        data-key="info"
+        role="status"
+      >
+        {Phoenix.Flash.get(@flash, :info)}
+      </div>
+      <div
+        :if={Phoenix.Flash.get(@flash, :error)}
+        id="toast-error"
+        class="flash-toast flash-toast-error"
+        phx-hook="FlashToast"
+        data-key="error"
+        role="alert"
+      >
+        {Phoenix.Flash.get(@flash, :error)}
+      </div>
     </div>
     """
   end

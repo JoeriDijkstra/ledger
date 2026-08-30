@@ -35,6 +35,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
      socket
      |> assign(
        # browse
+       page_title: "Marketplace",
        filter: :all,
        search: "",
        visibility: :all,
@@ -61,28 +62,32 @@ defmodule MastheadWeb.AdminLive.Marketplace do
     site = load_install_site(socket, params["for"])
     installed = if site, do: Themes.installed_theme_ids(site.id), else: MapSet.new()
 
-    {:noreply,
-     socket
-     |> assign(
-       page_title: "Marketplace",
-       filter: filter,
-       install_site: site,
-       installed: installed
-     )
-     |> load_themes()}
+    if filter == :mine and is_nil(socket.assigns.current_user) do
+      {:noreply, push_navigate(socket, to: ~p"/marketplace")}
+    else
+      {:noreply,
+       socket
+       |> assign(
+         page_title: "Marketplace",
+         filter: filter,
+         install_site: site,
+         installed: installed
+       )
+       |> load_themes()}
+    end
   end
 
   # Load the site named by `?for=`, owner-checked. Nil (discovery mode) when
-  # absent or not accessible.
+  # absent, not accessible, or nobody's signed in.
   defp load_install_site(_socket, nil), do: nil
   defp load_install_site(_socket, ""), do: nil
 
   defp load_install_site(socket, slug) do
-    user = socket.assigns.current_user
-
-    if user.admin,
-      do: Sites.get_site_for_admin_by_slug!(slug),
-      else: Sites.get_user_site_by_slug!(user.id, slug)
+    case socket.assigns.current_user do
+      nil -> nil
+      %{admin: true} -> Sites.get_site_for_admin_by_slug!(slug)
+      user -> Sites.get_user_site_by_slug!(user.id, slug)
+    end
   rescue
     Ecto.NoResultsError -> nil
   end
@@ -106,8 +111,11 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   end
 
   defp load_themes(%{assigns: a} = socket) do
-    assign(socket, themes: Themes.list_marketplace(a.current_user.id, a.filter, a.search))
+    assign(socket, themes: Themes.list_marketplace(viewer_id(a), a.filter, a.search))
   end
+
+  defp viewer_id(%{current_user: nil}), do: nil
+  defp viewer_id(%{current_user: user}), do: user.id
 
   # Reload after an install/uninstall/etc. — refresh the installed set too.
   defp refresh(%{assigns: %{install_site: nil}} = socket), do: load_themes(socket)
@@ -126,9 +134,12 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   # ---- filter / search ----
 
   # "My themes" sits alongside the published-theme filters; to a user it's
-  # the same idea — narrow the same gallery.
-  defp filter_options,
-    do: [{:all, "All"}, {:verified, "Verified"}, {:community, "Community"}, {:mine, "My themes"}]
+  # the same idea — narrow the same gallery. A signed-out visitor has no
+  # library, so the filter isn't offered.
+  defp filter_options(nil),
+    do: [{:all, "All"}, {:verified, "Verified"}, {:community, "Community"}]
+
+  defp filter_options(_user), do: filter_options(nil) ++ [{:mine, "My themes"}]
 
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
@@ -196,6 +207,12 @@ defmodule MastheadWeb.AdminLive.Marketplace do
 
   def handle_event("cancel-upload", %{"ref" => ref}, socket) do
     {:noreply, cancel_upload(socket, :theme_zip, ref)}
+  end
+
+  # The button is hidden for a visitor, but hidden markup isn't a permission
+  # check — the socket is reachable either way.
+  def handle_event("upload", _params, %{assigns: %{current_user: nil}} = socket) do
+    {:noreply, socket}
   end
 
   def handle_event("upload", _params, socket) do
@@ -421,7 +438,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   @impl true
   def render(assigns) do
     ~H"""
-    <.shell title={@page_title} current_user={@current_user} flash={@flash} active={:marketplace}>
+    <.marketplace_shell title={@page_title} current_user={@current_user} flash={@flash}>
       <:actions>
         <a
           href="https://github.com/JoeriDijkstra/masthead-template"
@@ -440,6 +457,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
           <span>Theme template</span>
         </a>
         <button
+          :if={@current_user}
           type="button"
           phx-click="open_modal"
           class="btn btn-primary"
@@ -459,10 +477,15 @@ defmodule MastheadWeb.AdminLive.Marketplace do
       </div>
 
       <p :if={is_nil(@install_site)} class="page-intro">
-        {if @filter == :mine do
-          "Every theme you have — built-ins and your uploads. Upload your own Liquid packages and publish them to the marketplace for others to use."
-        else
-          "Discover themes the community has published. Open the marketplace from a site's theme page to install one onto that site."
+        {cond do
+          @filter == :mine ->
+            "Every theme you have — built-ins and your uploads. Upload your own Liquid packages and publish them to the marketplace for others to use."
+
+          is_nil(@current_user) ->
+            "Themes the Masthead community has published. Open one to see its previews — installing takes an account."
+
+          true ->
+            "Discover themes the community has published. Open the marketplace from a site's theme page to install one onto that site."
         end}
       </p>
 
@@ -470,7 +493,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
         <div class="admin-toolbar-row">
           <div class="admin-filters">
             <.link
-              :for={{value, label} <- filter_options()}
+              :for={{value, label} <- filter_options(@current_user)}
               patch={filter_path(value, @install_site)}
               class={["btn btn-sm", @filter == value && "btn-primary"]}
             >
@@ -507,7 +530,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
       <% end %>
 
       <.upload_modal :if={@modal_open?} uploads={@uploads} upload_error={@upload_error} />
-    </.shell>
+    </.marketplace_shell>
     """
   end
 

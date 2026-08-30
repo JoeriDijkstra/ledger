@@ -270,6 +270,31 @@ defmodule MastheadWeb.MarketplaceLiveTest do
     assert html =~ ~s(href="/#{site.slug}/theme")
   end
 
+  test "a signed-out visitor browses the same gallery without the sidebar", %{author: author} do
+    _theme = published(author, "Open To All")
+
+    {:ok, _lv, html} = live(signed_out(), ~p"/marketplace")
+
+    assert html =~ "Open To All"
+    # No sidebar, no "My themes" filter, no upload button — just the catalogue.
+    refute html =~ ~s(id="admin-sidebar")
+    refute html =~ "My themes"
+    refute html =~ "Upload theme"
+    # It wears the homepage's nav and footer instead, with Marketplace marked
+    # as the page you're on.
+    assert html =~ "landing-nav"
+    assert html =~ "landing-footer"
+    assert html =~ ~s(href="/signup")
+    assert html =~ ~s(aria-current="page")
+  end
+
+  test "a signed-out visitor is sent back to the marketplace from My themes" do
+    assert {:error, {:live_redirect, %{to: "/marketplace"}}} =
+             live(signed_out(), ~p"/marketplace/my-themes")
+  end
+
+  defp signed_out, do: build_conn() |> Plug.Test.init_test_session(%{})
+
   defp site_for(user) do
     default = Themes.get_built_in_by_slug("default")
 

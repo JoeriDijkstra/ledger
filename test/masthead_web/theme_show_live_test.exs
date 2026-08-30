@@ -323,6 +323,32 @@ defmodule MastheadWeb.ThemeShowLiveTest do
     end
   end
 
+  describe "signed out" do
+    test "a published listing is readable, with a sign-up prompt in place of the install picker",
+         %{author: author} do
+      theme = published(author, "Public Listing")
+      {:ok, theme} = Themes.update_details(theme, %{"description" => "Anyone can read this."})
+
+      {:ok, _lv, html} = live(signed_out(), ~p"/marketplace/themes/#{theme.id}")
+
+      assert html =~ "Public Listing"
+      assert html =~ "Anyone can read this."
+      assert html =~ "Create an account"
+      refute html =~ ~s(id="install-site")
+      refute html =~ ~s(id="admin-sidebar")
+    end
+
+    test "an unpublished listing is not", %{author: author} do
+      theme = published(author, "Private Listing")
+      {:ok, theme} = Themes.unpublish_theme(theme)
+
+      assert {:error, {:redirect, %{to: "/marketplace"}}} =
+               live(signed_out(), ~p"/marketplace/themes/#{theme.id}")
+    end
+  end
+
+  defp signed_out, do: build_conn() |> Plug.Test.init_test_session(%{})
+
   defp published(user, name) do
     {:ok, theme} =
       Themes.create_upload(%{
