@@ -205,12 +205,13 @@ defmodule MastheadWeb.AdminLive.Marketplace do
       end)
 
     case results do
+      # Straight to the new theme's page — a fresh upload has no description
+      # or previews yet, and that's where they're added.
       [{:ok, theme}] ->
         {:noreply,
          socket
-         |> assign(modal_open?: false, upload_error: nil)
-         |> load_themes()
-         |> put_flash(:info, "Theme \"#{theme.name}\" installed.")}
+         |> put_flash(:info, "Theme \"#{theme.name}\" uploaded.")
+         |> push_navigate(to: ~p"/marketplace/themes/#{theme.id}")}
 
       [{:error, reason}] ->
         {:noreply, assign(socket, upload_error: format_error(reason))}
@@ -413,7 +414,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
     <.shell title={@page_title} current_user={@current_user} flash={@flash} active={:marketplace}>
       <:actions>
         <a
-          :if={@filter == :mine}
           href="https://github.com/JoeriDijkstra/masthead-template"
           target="_blank"
           rel="noopener"
@@ -430,7 +430,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
           <span>Theme template</span>
         </a>
         <button
-          :if={@filter == :mine}
           type="button"
           phx-click="open_modal"
           class="btn btn-primary"
