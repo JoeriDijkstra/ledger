@@ -5,9 +5,12 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   Community):
 
     * `:all` / `:verified` / `:community` — themes published by others.
-    * `:mine` — your own uploaded themes. Upload here; a card links to the
-      theme manage page (`AdminLive.ThemeManage`) for description/gallery/
-      publish/delete.
+    * `:mine` — your own uploaded themes. Upload here; a card opens the
+      theme detail page, where the author edits description, gallery and
+      listing visibility in place.
+
+  Cards are covers only — every card opens the theme's detail page
+  (`AdminLive.ThemeShow`) for the description, gallery, and install panel.
 
   Opened from the nav it's discovery-only. Opened from a site's theme page
   ("+" card → `?for=<site-slug>`) it enters that site's **install context**:
@@ -34,12 +37,8 @@ defmodule MastheadWeb.AdminLive.Marketplace do
        # browse
        filter: :all,
        search: "",
-       carousel: nil,
        installed: MapSet.new(),
        install_site: nil,
-       # site picker (install with no site context)
-       install_picker_theme: nil,
-       picker_sites: [],
        # my themes
        modal_open?: false,
        upload_error: nil,
@@ -116,7 +115,14 @@ defmodule MastheadWeb.AdminLive.Marketplace do
     socket |> assign(installed: Themes.installed_theme_ids(site.id)) |> load_themes()
   end
 
-  # ---- filter / search / carousel ----
+  # Every card links to the theme's detail page — description, gallery and
+  # the install panel live there. The site install context rides along.
+  defp theme_path(theme, nil), do: ~p"/marketplace/themes/#{theme.id}"
+
+  defp theme_path(theme, %{slug: slug}),
+    do: ~p"/marketplace/themes/#{theme.id}?#{[for: slug]}"
+
+  # ---- filter / search ----
 
   # "My themes" sits alongside the published-theme filters; to a user it's
   # the same idea — narrow the same gallery.
@@ -126,28 +132,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   @impl true
   def handle_event("search", %{"query" => query}, socket) do
     {:noreply, socket |> assign(search: query) |> load_themes()}
-  end
-
-  def handle_event("open_carousel", %{"id" => id}, socket) do
-    id = String.to_integer(id)
-    theme = Enum.find(socket.assigns.themes, &(&1.id == id))
-
-    if theme && theme.images != [] do
-      {:noreply, assign(socket, carousel: %{theme: theme, images: theme.images, index: 0})}
-    else
-      {:noreply, socket}
-    end
-  end
-
-  def handle_event("close_carousel", _params, socket) do
-    {:noreply, assign(socket, carousel: nil)}
-  end
-
-  def handle_event("carousel_nav", %{"dir" => dir}, socket) do
-    %{images: images, index: index} = c = socket.assigns.carousel
-    count = length(images)
-    step = if dir == "next", do: 1, else: count - 1
-    {:noreply, assign(socket, carousel: %{c | index: rem(index + step, count)})}
   end
 
   # ---- install / uninstall onto the site in context ----
@@ -185,37 +169,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
       {:error, :in_use} ->
         {:noreply,
          put_flash(socket, :error, "That theme is active on the site — pick another first.")}
-
-      _ ->
-        {:noreply, socket}
-    end
-  end
-
-  # ---- install with no site context: pick a site ----
-
-  def handle_event("open_install_picker", %{"id" => id}, socket) do
-    theme = Themes.get_theme!(id)
-    sites = Sites.list_sites_for_user(socket.assigns.current_user.id)
-    {:noreply, assign(socket, install_picker_theme: theme, picker_sites: sites)}
-  end
-
-  def handle_event("close_install_picker", _params, socket) do
-    {:noreply, assign(socket, install_picker_theme: nil, picker_sites: [])}
-  end
-
-  def handle_event("install_to_site", %{"site_id" => site_id}, socket) do
-    theme = socket.assigns.install_picker_theme
-    site = Enum.find(socket.assigns.picker_sites, &(to_string(&1.id) == site_id))
-
-    case theme && site && Themes.install_theme(site, theme) do
-      {:ok, _} ->
-        {:noreply,
-         socket
-         |> assign(install_picker_theme: nil, picker_sites: [])
-         |> put_flash(:info, "\"#{theme.name}\" installed on #{site.name}.")}
-
-      {:error, :not_installable} ->
-        {:noreply, put_flash(socket, :error, "That theme can't be installed on that site.")}
 
       _ ->
         {:noreply, socket}
@@ -303,23 +256,22 @@ defmodule MastheadWeb.AdminLive.Marketplace do
 
   # Install control for a theme — a compact icon button. With a site in
   # context, install/uninstall act directly on that site (its active theme
-  # can't be uninstalled). Without one, it opens a site picker.
+  # can't be uninstalled). Without one, it opens the theme's detail page,
+  # where the install panel picks the target site.
   attr :theme, :map, required: true
   attr :installed, :any, required: true
   attr :install_site, :map, default: nil
 
   defp install_button(%{install_site: nil} = assigns) do
     ~H"""
-    <button
-      type="button"
+    <.link
+      navigate={theme_path(@theme, nil)}
       class="card-icon-btn is-primary"
-      phx-click="open_install_picker"
-      phx-value-id={@theme.id}
       title="Install on a site"
       aria-label={"Install #{@theme.name}"}
     >
       <.install_icon />
-    </button>
+    </.link>
     """
   end
 
@@ -386,82 +338,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
     >
       <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
     </svg>
-    """
-  end
-
-  defp edit_icon(assigns) do
-    ~H"""
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke-width="1.7"
-      stroke="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125"
-      />
-    </svg>
-    """
-  end
-
-  # Site picker shown when installing with no site in context — choose which
-  # site to install the theme onto.
-  attr :theme, :map, required: true
-  attr :sites, :list, required: true
-
-  defp site_picker(assigns) do
-    ~H"""
-    <div class="dialog-backdrop" phx-window-keydown="close_install_picker" phx-key="Escape">
-      <button
-        type="button"
-        phx-click="close_install_picker"
-        class="dialog-close-overlay"
-        aria-label="Close"
-        tabindex="-1"
-      >
-      </button>
-      <div class="dialog">
-        <header class="dialog-header">
-          <h2>Install "{@theme.name}"</h2>
-          <button
-            type="button"
-            phx-click="close_install_picker"
-            class="dialog-close"
-            aria-label="Close"
-          >
-            &times;
-          </button>
-        </header>
-
-        <div class="dialog-form">
-          <p :if={@sites == []} class="muted">
-            You don't have any sites yet. Create a site first, then install a theme onto it.
-          </p>
-          <p :if={@sites != []} class="muted">
-            Choose a site to install this theme onto. You can then select it on that site's
-            theme page.
-          </p>
-
-          <ul :if={@sites != []} class="site-picker-list">
-            <li :for={site <- @sites}>
-              <button
-                type="button"
-                class="btn btn-block"
-                phx-click="install_to_site"
-                phx-value-site_id={site.id}
-              >
-                <span>{site.name}</span>
-                <span class="muted">{site.slug}</span>
-              </button>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
     """
   end
 
@@ -611,12 +487,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
         {browse_body(assigns)}
       <% end %>
 
-      <.carousel_modal :if={@carousel} carousel={@carousel} />
-      <.site_picker
-        :if={@install_picker_theme}
-        theme={@install_picker_theme}
-        sites={@picker_sites}
-      />
       <.upload_modal :if={@modal_open?} uploads={@uploads} upload_error={@upload_error} />
     </.shell>
     """
@@ -644,25 +514,26 @@ defmodule MastheadWeb.AdminLive.Marketplace do
         <li :for={t <- @themes} id={"marketplace-card-#{t.id}"}>
           <article class="marketplace-card">
             <div class="marketplace-thumb">
-              <button
-                :if={first_image(t)}
-                type="button"
+              <.link
+                navigate={theme_path(t, @install_site)}
                 class="marketplace-thumb-btn"
-                phx-click="open_carousel"
-                phx-value-id={t.id}
-                aria-label={"View #{t.name} images"}
+                aria-label={"View #{t.name}"}
               >
-                <img src={Themes.image_url(first_image(t))} alt={"#{t.name} preview"} />
+                <img
+                  :if={first_image(t)}
+                  src={Themes.image_url(first_image(t))}
+                  alt={"#{t.name} preview"}
+                />
+                <img
+                  :if={is_nil(first_image(t))}
+                  class="marketplace-thumb-placeholder"
+                  src={placeholder_image(t)}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                />
                 <span class="marketplace-thumb-zoom" aria-hidden="true">⤢</span>
-              </button>
-              <img
-                :if={is_nil(first_image(t))}
-                class="marketplace-thumb-placeholder"
-                src={placeholder_image(t)}
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-              />
+              </.link>
               <div class="marketplace-card-tags">
                 <.theme_badge theme={t} />
                 <span class="chip chip-accent theme-card-version">v{t.version}</span>
@@ -670,7 +541,7 @@ defmodule MastheadWeb.AdminLive.Marketplace do
             </div>
             <div class="marketplace-card-meta">
               <div class="marketplace-card-id">
-                <h3>{t.name}</h3>
+                <h3><.link navigate={theme_path(t, @install_site)}>{t.name}</.link></h3>
               </div>
               <div class="marketplace-card-actions">
                 <.install_button theme={t} installed={@installed} install_site={@install_site} />
@@ -699,39 +570,36 @@ defmodule MastheadWeb.AdminLive.Marketplace do
         <li :for={t <- @themes} id={"theme-card-#{t.id}"}>
           <article class="marketplace-card">
             <div class="marketplace-thumb">
-              <img
-                :if={first_image(t)}
-                src={Themes.image_url(first_image(t))}
-                alt={"#{t.name} preview"}
-              />
-              <img
-                :if={is_nil(first_image(t))}
-                class="marketplace-thumb-placeholder"
-                src={placeholder_image(t)}
-                alt=""
-                aria-hidden="true"
-                loading="lazy"
-              />
+              <.link
+                navigate={theme_path(t, @install_site)}
+                class="marketplace-thumb-btn"
+                aria-label={"View #{t.name}"}
+              >
+                <img
+                  :if={first_image(t)}
+                  src={Themes.image_url(first_image(t))}
+                  alt={"#{t.name} preview"}
+                />
+                <img
+                  :if={is_nil(first_image(t))}
+                  class="marketplace-thumb-placeholder"
+                  src={placeholder_image(t)}
+                  alt=""
+                  aria-hidden="true"
+                  loading="lazy"
+                />
+                <span class="marketplace-thumb-zoom" aria-hidden="true">⤢</span>
+              </.link>
               <div class="marketplace-card-tags">
-                <span class={["chip", if(t.public, do: "chip-marketplace", else: "chip-neutral")]}>
-                  {if t.public, do: "Published", else: "Draft"}
-                </span>
+                <.theme_status theme={t} />
                 <span class="chip chip-accent theme-card-version">v{t.version}</span>
               </div>
             </div>
             <div class="marketplace-card-meta">
               <div class="marketplace-card-id">
-                <h3>{t.name}</h3>
+                <h3><.link navigate={theme_path(t, @install_site)}>{t.name}</.link></h3>
               </div>
               <div class="marketplace-card-actions">
-                <.link
-                  navigate={~p"/marketplace/my-themes/#{t.id}"}
-                  class="card-icon-btn"
-                  title="Edit theme"
-                  aria-label={"Edit #{t.name}"}
-                >
-                  <.edit_icon />
-                </.link>
                 <.install_button theme={t} installed={@installed} install_site={@install_site} />
               </div>
             </div>
@@ -750,88 +618,6 @@ defmodule MastheadWeb.AdminLive.Marketplace do
   end
 
   # ---- modals & icons (function components) ----
-
-  defp carousel_modal(assigns) do
-    ~H"""
-    <div class="dialog-backdrop" phx-window-keydown="close_carousel" phx-key="Escape">
-      <button
-        type="button"
-        phx-click="close_carousel"
-        class="dialog-close-overlay"
-        aria-label="Close"
-        tabindex="-1"
-      >
-      </button>
-      <div class="dialog dialog-carousel">
-        <header class="dialog-header">
-          <div class="dialog-title">
-            <h2>{@carousel.theme.name}</h2>
-            <div class="theme-card-tags">
-              <.theme_badge theme={@carousel.theme} />
-              <span class="chip chip-accent theme-card-version">v{@carousel.theme.version}</span>
-            </div>
-          </div>
-          <button type="button" phx-click="close_carousel" class="dialog-close" aria-label="Close">
-            &times;
-          </button>
-        </header>
-
-        <div class="carousel">
-          <button
-            :if={length(@carousel.images) > 1}
-            type="button"
-            class="carousel-nav carousel-prev"
-            phx-click="carousel_nav"
-            phx-value-dir="prev"
-            aria-label="Previous image"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-            </svg>
-          </button>
-
-          <div class="carousel-stage">
-            <img
-              src={Themes.image_url(Enum.at(@carousel.images, @carousel.index))}
-              alt={"#{@carousel.theme.name} preview #{@carousel.index + 1}"}
-            />
-          </div>
-
-          <button
-            :if={length(@carousel.images) > 1}
-            type="button"
-            class="carousel-nav carousel-next"
-            phx-click="carousel_nav"
-            phx-value-dir="next"
-            aria-label="Next image"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="2"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-            </svg>
-          </button>
-        </div>
-
-        <p :if={length(@carousel.images) > 1} class="carousel-counter">
-          {@carousel.index + 1} / {length(@carousel.images)}
-        </p>
-      </div>
-    </div>
-    """
-  end
 
   defp upload_modal(assigns) do
     ~H"""

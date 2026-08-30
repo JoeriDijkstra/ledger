@@ -1,4 +1,4 @@
-// LiveView hook: drag-to-reorder a vertical list using the native HTML5
+// LiveView hook: drag-to-reorder a list using the native HTML5
 // drag-and-drop API (no external dependency). Attach to the list container;
 // each draggable child must carry data-sortable-id. While dragging we
 // reorder the DOM optimistically for live feedback, and on drop we push the
@@ -7,11 +7,14 @@
 //   <ul id="..." phx-hook="SortableList" data-sortable-event="reorder_previews">
 //     <li draggable="true" data-sortable-id={id} id={"row-#{id}"}>…</li>
 //
+// Vertical by default; data-sortable-axis="x" sorts a horizontal strip.
+//
 // Listeners are delegated on the container and attached once in mounted(),
 // so they survive LiveView patches (which keep the same container element).
 export const SortableList = {
   mounted() {
     this.dragEl = null
+    this.horizontal = this.el.dataset.sortableAxis === "x"
     const el = this.el
     const event = el.dataset.sortableEvent || "reorder"
 
@@ -32,7 +35,7 @@ export const SortableList = {
       if (!this.dragEl) return
       e.preventDefault()
       e.dataTransfer.dropEffect = "move"
-      const after = this.afterElement(e.clientY)
+      const after = this.afterElement(this.horizontal ? e.clientX : e.clientY)
       if (after == null) {
         el.appendChild(this.dragEl)
       } else if (after !== this.dragEl) {
@@ -49,14 +52,16 @@ export const SortableList = {
     })
   },
 
-  // The first sibling whose vertical midpoint is below the cursor — the
-  // dragged element should be inserted before it.
-  afterElement(y) {
+  // The first sibling whose midpoint lies past the cursor along the sort
+  // axis — the dragged element should be inserted before it.
+  afterElement(pos) {
     const items = [...this.el.querySelectorAll("[data-sortable-id]:not(.is-dragging)")]
     return items.reduce(
       (closest, child) => {
         const box = child.getBoundingClientRect()
-        const offset = y - box.top - box.height / 2
+        const offset = this.horizontal
+          ? pos - box.left - box.width / 2
+          : pos - box.top - box.height / 2
         if (offset < 0 && offset > closest.offset) {
           return {offset, element: child}
         }
