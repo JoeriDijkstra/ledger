@@ -30,6 +30,29 @@ defmodule MastheadWeb.ThemeShowLiveTest do
     assert html =~ "preview 2"
   end
 
+  test "arrow keys walk the gallery", %{conn: conn, author: author} do
+    theme = published(author, "Gallery Keys")
+    {:ok, _} = Themes.add_theme_image(theme, image_file("a.png"))
+    {:ok, _} = Themes.add_theme_image(theme, image_file("b.png"))
+
+    {:ok, lv, html} = live(conn, ~p"/marketplace/themes/#{theme.id}")
+    assert html =~ "preview 1"
+
+    html = render_keydown(lv, "gallery_key", %{"key" => "ArrowRight"})
+    assert html =~ "preview 2"
+
+    # Wraps at both ends.
+    html = render_keydown(lv, "gallery_key", %{"key" => "ArrowRight"})
+    assert html =~ "preview 1"
+
+    html = render_keydown(lv, "gallery_key", %{"key" => "ArrowLeft"})
+    assert html =~ "preview 2"
+
+    # Anything else leaves the gallery where it is.
+    html = render_keydown(lv, "gallery_key", %{"key" => "Enter"})
+    assert html =~ "preview 2"
+  end
+
   test "picking a site in the sidebar installs the theme onto it", %{
     conn: conn,
     user: user,
@@ -136,6 +159,25 @@ defmodule MastheadWeb.ThemeShowLiveTest do
 
       assert html =~ "Roomy and calm."
       assert Themes.get_theme!(theme.id).description == "Roomy and calm."
+    end
+
+    test "arrow keys leave the gallery alone while a text field is open", %{
+      conn: conn,
+      own: theme
+    } do
+      {:ok, _} = Themes.add_theme_image(theme, image_file("a.png"))
+      {:ok, _} = Themes.add_theme_image(theme, image_file("b.png"))
+
+      {:ok, lv, _html} = live(conn, ~p"/marketplace/themes/#{theme.id}")
+
+      # Editing the description: the arrows belong to the caret.
+      lv |> element(~s(button[phx-click="edit_description"])) |> render_click()
+      html = render_keydown(lv, "gallery_key", %{"key" => "ArrowRight"})
+      assert html =~ "preview 1"
+
+      lv |> element(~s(button[phx-click="cancel_description"])) |> render_click()
+      html = render_keydown(lv, "gallery_key", %{"key" => "ArrowRight"})
+      assert html =~ "preview 2"
     end
 
     test "the author adds, reorders and removes preview images", %{conn: conn, own: theme} do

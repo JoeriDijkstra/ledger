@@ -97,6 +97,91 @@ defmodule MastheadWeb.MarketplaceLiveTest do
     refute html =~ "Moonset"
   end
 
+  test "search also matches a theme's description", %{conn: conn, author: author} do
+    described = published(author, "Nebula")
+    {:ok, _} = Themes.update_details(described, %{"description" => "A documentation theme."})
+    _other = published(author, "Sunrise")
+
+    {:ok, lv, _html} = live(conn, ~p"/marketplace")
+
+    html = lv |> form(~s(form[phx-change="search"]), %{query: "documentation"}) |> render_change()
+
+    assert html =~ "Nebula"
+    refute html =~ "Sunrise"
+  end
+
+  test "the browse card shows the description", %{conn: conn, author: author} do
+    theme = published(author, "Described")
+    {:ok, _} = Themes.update_details(theme, %{"description" => "Calm and roomy."})
+
+    {:ok, _lv, html} = live(conn, ~p"/marketplace")
+
+    assert html =~ "Calm and roomy."
+  end
+
+  test "My themes has its own search box", %{conn: conn, user: user} do
+    _keep = published(user, "Keeper")
+    _drop = published(user, "Dropper")
+
+    {:ok, lv, html} = live(conn, ~p"/marketplace/my-themes")
+    # The search box carries the Cmd/Ctrl+F shortcut hook, like every list page.
+    assert html =~ ~s(data-shortcut="search")
+
+    html = lv |> form(~s(form[phx-change="search"]), %{query: "keep"}) |> render_change()
+
+    assert html =~ "Keeper"
+    refute html =~ "Dropper"
+  end
+
+  test "a fruitless My themes search says so instead of offering onboarding", %{
+    conn: conn,
+    user: user
+  } do
+    _own = published(user, "Keeper")
+
+    {:ok, lv, _html} = live(conn, ~p"/marketplace/my-themes")
+
+    html =
+      lv |> form(~s(form[phx-change="search"]), %{query: "nothing-matches"}) |> render_change()
+
+    assert html =~ "Nothing here yet"
+    assert html =~ "No themes match"
+    refute html =~ "Upload a Liquid theme package"
+  end
+
+  test "the visibility dropdown narrows My themes to public or private", %{conn: conn, user: user} do
+    _pub = published(user, "Out In The Open")
+
+    {:ok, priv} =
+      Themes.create_upload(%{
+        slug: "priv#{System.unique_integer([:positive])}",
+        name: "Kept Back",
+        version: "1.0.0",
+        storage_path: "themes/uploaded/1.0.0",
+        owner_id: user.id
+      })
+
+    {:ok, lv, html} = live(conn, ~p"/marketplace/my-themes")
+    assert html =~ "Out In The Open"
+    assert html =~ priv.name
+
+    html =
+      lv |> form(~s(form[phx-change="visibility"]), %{visibility: "private"}) |> render_change()
+
+    assert html =~ "Kept Back"
+    refute html =~ "Out In The Open"
+
+    html =
+      lv |> form(~s(form[phx-change="visibility"]), %{visibility: "public"}) |> render_change()
+
+    assert html =~ "Out In The Open"
+    refute html =~ "Kept Back"
+
+    html = lv |> form(~s(form[phx-change="visibility"]), %{visibility: "all"}) |> render_change()
+    assert html =~ "Out In The Open"
+    assert html =~ "Kept Back"
+  end
+
   test "does not show your own themes", %{conn: conn, user: user} do
     _own = published(user, "My Own Theme")
 
