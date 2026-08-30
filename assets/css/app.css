@@ -103,6 +103,19 @@
 /* ---- Masthead: admin + auth + marketing ---- */
 
 :root {
+  /* The landing palette (slate) — kept apart from the admin palette (zinc)
+     below. Lives here rather than on `.landing` so the signed-out
+     marketplace header can wear the same colours as the homepage nav. */
+  --landing-fg: #0f172a;
+  --landing-fg-soft: #334155;
+  --landing-muted: #64748b;
+  --landing-rule: #e2e8f0;
+  --landing-bg: #f8fafc;
+  --landing-card: #ffffff;
+  --landing-accent: #2563eb;
+  --landing-accent-hover: #1d4ed8;
+  --landing-accent-soft: #eff6ff;
+
   --fg: #18181b;
   --fg-soft: #3f3f46;
   --muted: #71717a;
@@ -2837,16 +2850,6 @@ button.danger:hover { filter: brightness(0.92); }
 
 /* ---- Landing page ---- */
 .landing {
-  --landing-fg: #0f172a;
-  --landing-fg-soft: #334155;
-  --landing-muted: #64748b;
-  --landing-rule: #e2e8f0;
-  --landing-bg: #f8fafc;
-  --landing-card: #ffffff;
-  --landing-accent: #2563eb;
-  --landing-accent-hover: #1d4ed8;
-  --landing-accent-soft: #eff6ff;
-
   font-family: -apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif;
   color: var(--landing-fg);
   background: var(--landing-bg);
@@ -2866,7 +2869,7 @@ button.danger:hover { filter: brightness(0.92); }
   align-items: center;
   justify-content: space-between;
 }
-.landing .brand {
+.landing-nav .brand {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -2874,20 +2877,35 @@ button.danger:hover { filter: brightness(0.92); }
   font-weight: 600;
   font-size: 1rem;
 }
-.landing .brand:hover { color: var(--landing-fg); }
+.landing-nav .brand:hover { color: var(--landing-fg); }
 .landing .brand-mark { color: var(--landing-accent); }
-.landing .brand-logo {
+.landing-nav .brand-logo {
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 30%;
   object-fit: cover;
 }
-.landing .nav-cta { display: flex; align-items: center; gap: 1rem; }
-.landing .nav-link { color: var(--landing-fg-soft); font-weight: 500; font-size: 0.92rem; }
-.landing .nav-link:hover { color: var(--landing-fg); }
+.landing-nav .nav-cta { display: flex; align-items: center; gap: 1rem; }
+.landing-nav .nav-link { color: var(--landing-fg-soft); font-weight: 500; font-size: 0.92rem; }
+.landing-nav .nav-link:hover { color: var(--landing-fg); }
+.landing-nav .nav-link.is-active {
+  color: var(--landing-fg);
+  font-weight: 600;
+  position: relative;
+}
+.landing-nav .nav-link.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.5rem;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--landing-accent);
+}
 /* Base GitHub button for admin contexts (e.g. the Themes top bar). The
    landing page overrides these with its own palette via the more specific
-   `.landing .github-btn` rules below. */
+   `.landing-nav` / `.landing-footer` rules below. */
 .github-btn {
   display: inline-flex;
   align-items: center;
@@ -2909,7 +2927,9 @@ button.danger:hover { filter: brightness(0.92); }
 }
 .github-btn svg { width: 18px; height: 18px; }
 
-.landing .github-btn {
+.landing .github-btn,
+.landing-nav .github-btn,
+.landing-footer .github-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -2922,15 +2942,20 @@ button.danger:hover { filter: brightness(0.92); }
   font-size: 0.88rem;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
-.landing .github-btn:hover {
+.landing .github-btn:hover,
+.landing-nav .github-btn:hover,
+.landing-footer .github-btn:hover {
   background: var(--landing-bg);
   border-color: var(--landing-fg);
   text-decoration: none;
 }
-.landing .github-btn svg { width: 18px; height: 18px; }
+.landing .github-btn svg,
+.landing-nav .github-btn svg,
+.landing-footer .github-btn svg { width: 18px; height: 18px; }
 
 /* Buttons (landing variants) */
-.landing .btn {
+.landing .btn,
+.landing-nav .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2942,14 +2967,17 @@ button.danger:hover { filter: brightness(0.92); }
   border: 1px solid transparent;
   cursor: pointer;
 }
-.landing .btn-sm { padding: 0.45rem 0.85rem; font-size: 0.88rem; }
+.landing .btn-sm,
+.landing-nav .btn-sm { padding: 0.45rem 0.85rem; font-size: 0.88rem; }
 .landing .btn-lg { padding: 0.8rem 1.5rem; font-size: 1rem; }
-.landing .btn-primary {
+.landing .btn-primary,
+.landing-nav .btn-primary {
   background: var(--landing-accent);
   color: white !important;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.25);
 }
-.landing .btn-primary:hover {
+.landing .btn-primary:hover,
+.landing-nav .btn-primary:hover {
   background: var(--landing-accent-hover);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
@@ -3282,6 +3310,27 @@ button.danger:hover { filter: brightness(0.92); }
   transition: color 0.15s ease;
 }
 .landing-footer-links a:hover { color: var(--landing-fg); }
+
+/* The signed-out marketplace: an admin body sitting between the marketing nav
+   and footer. Same 1100px column as the homepage, so nothing shifts when a
+   visitor arrives through the front page. */
+.public-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--landing-bg);
+}
+/* As flex items the nav and footer would shrink to their content — their
+   `margin: 0 auto` opts them out of the default stretch. */
+.public-shell > .landing-nav,
+.public-shell > .landing-footer { width: 100%; }
+.public-content {
+  flex: 1;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0.5rem 1.5rem 4rem;
+}
 
 @media (max-width: 800px) {
   .landing-hero {

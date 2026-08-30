@@ -86,6 +86,8 @@ defmodule MastheadWeb do
       import Phoenix.HTML
       # Core UI components
       import MastheadWeb.CoreComponents
+      # The homepage nav and footer, shared with the signed-out marketplace
+      import MastheadWeb.MarketingComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

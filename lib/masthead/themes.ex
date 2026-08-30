@@ -221,21 +221,28 @@ defmodule Masthead.Themes do
 
   @doc """
   Published themes available to install, for the marketplace browser.
-  Excludes the viewer's own themes (they live under "My themes"). Verified
+  Excludes the viewer's own themes (they live under "My themes"); a signed-out
+  visitor (`nil`) has none to exclude and sees the whole catalogue. Verified
   themes rank first (then community), each group alphabetical — in Postgres
   `true > false`, so `desc: verified` floats verified to the top. Owner and
   gallery images are preloaded for the grid.
   """
-  def list_marketplace(user_id, filter \\ :all, search \\ nil) when is_integer(user_id) do
+  def list_marketplace(user_id, filter \\ :all, search \\ nil) do
     from(t in Theme,
-      where: t.source == "uploaded" and t.public == true and t.owner_id != ^user_id,
+      where: t.source == "uploaded" and t.public == true,
       order_by: [desc: t.verified, asc: t.name],
       preload: [:owner, :images]
     )
+    |> exclude_own(user_id)
     |> apply_marketplace_filter(filter)
     |> apply_search(search)
     |> Repo.all()
   end
+
+  defp exclude_own(query, nil), do: query
+
+  defp exclude_own(query, user_id) when is_integer(user_id),
+    do: from(t in query, where: t.owner_id != ^user_id)
 
   defp apply_marketplace_filter(query, :verified), do: from(t in query, where: t.verified == true)
 
