@@ -73,6 +73,54 @@ window.addEventListener("masthead:copy", e => {
   })
 })
 
+// Confetti burst, pushed from the server as `push_event("celebrate", …)`.
+// Web Animations API on a handful of divs — a celebration isn't worth a
+// dependency. `detail.from` is a selector to fire from; defaults to the
+// element that most recently caused it.
+const CONFETTI_COLORS = ["#2563eb", "#22c55e", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4"]
+
+window.addEventListener("phx:celebrate", e => {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
+  const anchor = document.querySelector((e.detail && e.detail.from) || "body")
+  if (!anchor) return
+
+  const box = anchor.getBoundingClientRect()
+  confettiBurst(box.left + box.width / 2, box.top + box.height / 2)
+})
+
+function confettiBurst(x, y) {
+  const layer = document.createElement("div")
+  layer.className = "confetti-layer"
+  document.body.appendChild(layer)
+
+  for (let i = 0; i < 36; i++) {
+    const piece = document.createElement("i")
+    piece.className = "confetti-piece"
+    piece.style.left = `${x}px`
+    piece.style.top = `${y}px`
+    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length]
+    layer.appendChild(piece)
+
+    // Fan out in a full circle, then let gravity pull everything down.
+    const angle = (Math.PI * 2 * i) / 36 + Math.random() * 0.3
+    const distance = 80 + Math.random() * 140
+    const dx = Math.cos(angle) * distance
+    const dy = Math.sin(angle) * distance
+
+    piece.animate(
+      [
+        {transform: "translate(0, 0) rotate(0deg) scale(1)", opacity: 1, offset: 0},
+        {transform: `translate(${dx * 0.8}px, ${dy * 0.8}px) rotate(180deg) scale(1)`, opacity: 1, offset: 0.45},
+        {transform: `translate(${dx}px, ${dy + 160}px) rotate(${540 + Math.random() * 360}deg) scale(0.6)`, opacity: 0, offset: 1},
+      ],
+      {duration: 1100 + Math.random() * 600, easing: "cubic-bezier(.15,.7,.4,1)", fill: "forwards"}
+    )
+  }
+
+  setTimeout(() => layer.remove(), 1800)
+}
+
 // Relative timestamps (.rel-time) server-render their exact-date tooltip in
 // UTC as a no-JS fallback; on hover, rewrite it to the viewer's local
 // timezone. Delegated so it survives LiveView patches without per-element

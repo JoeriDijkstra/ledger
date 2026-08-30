@@ -126,44 +126,28 @@ defmodule MastheadWeb.MarketplaceLiveTest do
     assert MapSet.member?(Themes.installed_theme_ids(site.id), theme.id)
   end
 
-  test "without a site context, Install opens a site picker and installs onto the chosen site",
-       %{conn: conn, user: user, author: author} do
-    site = site_for(user)
+  test "without a site context, a card links to the theme's detail page", %{
+    conn: conn,
+    author: author
+  } do
     theme = published(author, "Browseable")
 
-    {:ok, lv, _html} = live(conn, ~p"/marketplace")
+    {:ok, _lv, html} = live(conn, ~p"/marketplace")
 
-    # The card's Install opens the picker (no direct install without a site).
-    html =
-      lv
-      |> element(~s(button[phx-click="open_install_picker"][phx-value-id="#{theme.id}"]))
-      |> render_click()
-
-    assert html =~ site.name
-
-    lv
-    |> element(~s(button[phx-click="install_to_site"][phx-value-site_id="#{site.id}"]))
-    |> render_click()
-
-    assert MapSet.member?(Themes.installed_theme_ids(site.id), theme.id)
+    assert html =~ ~s(href="/marketplace/themes/#{theme.id}")
   end
 
-  test "opening the carousel shows images and navigates", %{conn: conn, author: author} do
-    theme = published(author, "Gallery Theme")
-    {:ok, _} = Themes.add_theme_image(theme, image_file("a.png"))
-    {:ok, _} = Themes.add_theme_image(theme, image_file("b.png"))
+  test "a card carries the site install context into the detail page", %{
+    conn: conn,
+    user: user,
+    author: author
+  } do
+    site = site_for(user)
+    theme = published(author, "Contextual")
 
-    {:ok, lv, _html} = live(conn, ~p"/marketplace")
+    {:ok, _lv, html} = live(conn, ~p"/marketplace?#{[for: site.slug]}")
 
-    html = lv |> element(~s(button[phx-click="open_carousel"])) |> render_click()
-    assert html =~ "dialog-carousel"
-    assert html =~ "1 / 2"
-
-    html = lv |> element(~s(button[phx-value-dir="next"])) |> render_click()
-    assert html =~ "2 / 2"
-
-    html = lv |> element(~s(button[phx-click="close_carousel"]), "×") |> render_click()
-    refute html =~ "dialog-carousel"
+    assert html =~ ~s(href="/marketplace/themes/#{theme.id}?for=#{site.slug}")
   end
 
   test "the My themes filter shows the user's library", %{conn: conn, user: user} do
@@ -213,11 +197,5 @@ defmodule MastheadWeb.MarketplaceLiveTest do
       })
 
     site
-  end
-
-  defp image_file(filename) do
-    tmp = Path.join(System.tmp_dir!(), "mk-#{System.unique_integer([:positive])}-#{filename}")
-    File.write!(tmp, "bytes")
-    %{filename: filename, path: tmp}
   end
 end

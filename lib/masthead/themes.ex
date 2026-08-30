@@ -15,6 +15,7 @@ defmodule Masthead.Themes do
   alias Masthead.Storage
   alias Masthead.Themes.Theme
   alias Masthead.Themes.ThemeImage
+  alias Masthead.Themes.ThemeLink
   alias Masthead.Themes.ThemeInstall
 
   # Storage namespace for marketplace gallery images. Keys are scoped by
@@ -111,7 +112,7 @@ defmodule Masthead.Themes do
     theme |> Theme.upload_changeset(attrs) |> Repo.update()
   end
 
-  @doc "Changeset for the theme manage page's description form."
+  @doc "Changeset for the inline description editor on a theme's detail page."
   def change_details(%Theme{} = theme, attrs \\ %{}), do: Theme.details_changeset(theme, attrs)
 
   @doc "Update an uploaded theme's marketplace details (description)."
@@ -235,6 +236,11 @@ defmodule Masthead.Themes do
 
   defp apply_marketplace_filter(query, _all), do: query
 
+  @doc "How many themes an author has published, for the detail page's author card."
+  def published_count(owner_id) when is_integer(owner_id) do
+    Repo.aggregate(from(t in Theme, where: t.owner_id == ^owner_id and t.public == true), :count)
+  end
+
   @doc "Set of theme ids installed on a site (for marketplace install state)."
   def installed_theme_ids(site_id) when is_integer(site_id) do
     Repo.all(from i in ThemeInstall, where: i.site_id == ^site_id, select: i.theme_id)
@@ -347,6 +353,60 @@ defmodule Masthead.Themes do
 
   @doc "Public URL for a gallery image."
   def image_url(%ThemeImage{storage_path: path}), do: Storage.url(path)
+
+  # ---- listing links ----
+
+  @doc "A theme's listing links, in the author's chosen order."
+  def list_theme_links(theme_id) do
+    Repo.all(
+      from l in ThemeLink,
+        where: l.theme_id == ^theme_id,
+        order_by: [asc: l.position, asc: l.id]
+    )
+  end
+
+  @doc "Changeset for the listing-link form."
+  def change_theme_link(%ThemeLink{} = link \\ %ThemeLink{}, attrs \\ %{}) do
+    ThemeLink.changeset(link, attrs)
+  end
+
+  @doc "Append a link to a theme's listing, at the next free position."
+  def add_theme_link(%Theme{} = theme, attrs) do
+    %ThemeLink{}
+    |> ThemeLink.changeset(
+      Map.merge(attrs, %{"theme_id" => theme.id, "position" => next_link_position(theme.id)})
+    )
+    |> Repo.insert()
+  end
+
+  @doc """
+  Reorder a theme's links to match `ordered_ids` (first = position 0). Ids
+  are scoped to the theme, so a stray id from another theme is ignored.
+  """
+  def reorder_theme_links(theme_id, ordered_ids) when is_list(ordered_ids) do
+    Repo.transaction(fn ->
+      ordered_ids
+      |> Enum.with_index()
+      |> Enum.each(&set_link_position(&1, theme_id))
+    end)
+
+    :ok
+  end
+
+  @doc "Delete a listing link."
+  def delete_theme_link(%ThemeLink{} = link), do: Repo.delete(link)
+
+  defp set_link_position({id, index}, theme_id) do
+    Repo.update_all(
+      from(l in ThemeLink, where: l.id == ^id and l.theme_id == ^theme_id),
+      set: [position: index]
+    )
+  end
+
+  defp next_link_position(theme_id) do
+    max = Repo.one(from l in ThemeLink, where: l.theme_id == ^theme_id, select: max(l.position))
+    (max || -1) + 1
+  end
 
   # Remove the stored gallery files before the rows go (the FK's
   # `on_delete: :delete_all` clears the rows; this clears the bytes).

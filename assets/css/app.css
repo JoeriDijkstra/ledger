@@ -2346,6 +2346,9 @@ button.danger:hover { filter: brightness(0.92); }
 }
 #new-site-form .dialog-footer,
 #invite-user-form .dialog-footer { margin: 0; }
+/* The negative margins above exist to bleed out of .dialog-form's padding.
+   A footer placed straight under .dialog has no padding to escape. */
+.dialog > .dialog-footer { margin: 0; }
 .section-heading { margin-top: 2.5rem; }
 
 .upload-grid {
@@ -3296,9 +3299,10 @@ button.danger:hover { filter: brightness(0.92); }
    optically center it against the text. */
 .chip-you { margin-left: 0.55rem; vertical-align: middle; position: relative; top: -1px; }
 .chip-accent { background: var(--accent-soft); color: var(--accent-strong); }
-/* Marketplace status: blue "Verified" vs. yellow "Community". */
 /* Green chip for a verified marketplace theme. */
 .chip-verified { background: var(--good-soft); color: #166534; }
+/* Amber chip for a theme its author keeps private (not on the marketplace). */
+.chip-private { background: var(--amber-soft); color: #92400e; }
 /* Green chip marking an installed marketplace theme in the library. */
 .chip-marketplace { background: var(--good-soft); color: #166534; }
 
@@ -3341,9 +3345,11 @@ button.danger:hover { filter: brightness(0.92); }
   width: 100%;
   height: 100%;
   object-fit: cover;
+  /* Screenshots are tall; the top of a page is the recognisable part. */
+  object-position: top;
   display: block;
 }
-/* The thumbnail is a button that opens the image carousel. */
+/* The thumbnail is a link to the theme's detail page. */
 .marketplace-thumb-btn {
   display: block;
   width: 100%;
@@ -3444,6 +3450,8 @@ button.danger:hover { filter: brightness(0.92); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.marketplace-card-meta h3 a { color: inherit; text-decoration: none; }
+.marketplace-card-meta h3 a:hover { color: var(--accent); }
 .marketplace-card-meta .btn { flex-shrink: 0; }
 .marketplace-card-by {
   display: block;
@@ -3508,88 +3516,6 @@ button.danger:hover { filter: brightness(0.92); }
   display: block;
 }
 .preview-row-spacer { flex: 1; }
-
-/* Image carousel modal (marketplace). */
-.dialog-carousel { max-width: 64rem; width: min(94vw, 64rem); }
-.carousel {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1.25rem 1.5rem 0;
-}
-.carousel-stage {
-  flex: 1;
-  min-width: 0;
-  background: var(--rule);
-  border-radius: 10px;
-  overflow: hidden;
-}
-.carousel-stage img {
-  width: 100%;
-  max-height: 74vh;
-  min-height: 20rem;
-  object-fit: contain;
-  display: block;
-  margin: 0 auto;
-}
-.carousel-nav {
-  flex-shrink: 0;
-  width: 2.6rem;
-  height: 2.6rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: var(--card);
-  color: var(--fg);
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.carousel-nav svg { width: 1.25rem; height: 1.25rem; display: block; }
-.carousel-nav:hover {
-  background: var(--accent-soft);
-  border-color: var(--accent);
-}
-.carousel-counter {
-  margin: 0;
-  padding: 1rem 1.5rem 1.75rem;
-  text-align: center;
-  color: var(--muted);
-  font-size: 0.85rem;
-}
-/* When a theme has a single image there's no counter, so give the stage
-   its own bottom breathing room. */
-.dialog-carousel .carousel:last-child { padding-bottom: 1.75rem; }
-
-/* Theme gallery — uploaded preview thumbnails with a remove control. */
-.theme-gallery {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 1rem;
-}
-.theme-gallery li {
-  position: relative;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--rule);
-}
-.theme-gallery img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  display: block;
-}
-.theme-gallery-remove {
-  position: absolute;
-  top: 0.4rem;
-  right: 0.4rem;
-}
 
 /* Theme library grid — cards rather than a table. */
 .theme-grid {
@@ -4017,3 +3943,530 @@ button.danger:hover { filter: brightness(0.92); }
   border-color: var(--accent);
 }
 .manage-upload-submit { margin-top: 0.9rem; }
+
+/* Theme detail page — a product page: preview gallery and description on the
+   left, a sticky install card on the right. */
+.theme-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 1.5rem;
+  align-items: start;
+}
+.theme-detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* The preview sits in a browser-like frame so a screenshot reads as a site
+   rather than a loose image. */
+.theme-preview {
+  margin: 0;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+.theme-preview-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+}
+.theme-preview-dots { display: flex; gap: 0.35rem; }
+.theme-preview-dots i {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: var(--rule-strong);
+}
+.theme-preview-count {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* A fixed window onto the preview: screenshots vary in height, and anchoring
+   to the top shows the part of a page that sells a theme. */
+.theme-preview-stage {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  aspect-ratio: 16 / 9;
+  background: var(--bg);
+}
+/* Nothing to frame yet — don't reserve a screen-sized void. */
+.theme-preview-stage.is-empty {
+  aspect-ratio: auto;
+  min-height: 11rem;
+}
+.theme-preview-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top;
+}
+.theme-preview-empty {
+  margin: auto;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* `overflow-x: auto` clips the vertical axis too, so the padding has to be
+   deep enough to hold a thumbnail's remove button where it overhangs the
+   corner; the matching negative margin keeps the strip flush with the frame. */
+.theme-thumbs {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding: 0.6rem;
+  margin: -0.6rem;
+}
+.theme-thumb-strip,
+.theme-thumbs form {
+  display: flex;
+  gap: 0.6rem;
+}
+.theme-thumb-wrap { position: relative; }
+.theme-thumb-wrap[draggable="true"] { cursor: grab; }
+.theme-thumb-wrap.is-dragging { opacity: 0.4; }
+.theme-thumb {
+  display: block;
+  width: 6.5rem;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card);
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.theme-thumb img {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top;
+  display: block;
+  pointer-events: none;
+}
+.theme-thumb:hover { border-color: var(--rule-strong); }
+.theme-thumb.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* Remove control, revealed on hover so the strip stays calm while browsing. */
+.theme-thumb-remove {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.35rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.theme-thumb-wrap:hover .theme-thumb-remove,
+.theme-thumb-remove:focus-visible { opacity: 1; }
+.theme-thumb-remove:hover { color: var(--danger); border-color: currentColor; }
+
+/* "Add image" tile — the same footprint as a thumbnail, dashed like the
+   upload tile in the theme grid. */
+.theme-thumb-add {
+  flex: 0 0 6.5rem;
+  aspect-ratio: 16 / 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.theme-thumb-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.theme-thumb-add input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+.theme-thumb-add-icon { font-size: 1.2rem; line-height: 1; }
+.theme-thumb-add-label { font-size: 0.72rem; font-weight: 500; }
+.theme-upload-progress { margin: 0; font-size: 0.8rem; }
+
+/* Inline description editing. */
+.theme-about-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.6rem;
+}
+.theme-about-form { display: flex; flex-direction: column; gap: 0.75rem; }
+.theme-about-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font: inherit;
+  line-height: 1.6;
+  resize: vertical;
+  background: var(--card);
+}
+.theme-about-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.theme-about-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+.theme-about {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem 1.75rem;
+}
+.theme-about h2 {
+  margin: 0 0 0.6rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.theme-about p {
+  margin: 0;
+  max-width: 68ch;
+  line-height: 1.7;
+}
+.theme-about p + p { margin-top: 0.85rem; }
+
+/* The sidebar stays in view while the previews and description scroll. */
+.theme-detail-aside {
+  position: sticky;
+  top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Install card — the page's one call to action. */
+.install-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+}
+.install-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+.install-card label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+
+/* Site combobox — a text filter over the user's sites. Rendered by the
+   LiveView rather than a native datalist, so the menu matches the app. */
+.site-select { position: relative; }
+.site-select-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 2.2rem 0.55rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+}
+.site-select-input:focus,
+.site-select-input.is-open {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.site-select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+  max-height: 14rem;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+}
+.site-select-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.site-select-option:hover { background: var(--bg); }
+.site-select-option.is-selected { background: var(--accent-soft); }
+.site-select-name { font-size: 0.9rem; font-weight: 500; }
+.site-select-slug { font-size: 0.78rem; color: var(--muted); }
+.site-select-empty { padding: 0.5rem 0.55rem; color: var(--muted); font-size: 0.85rem; }
+.install-card .btn { padding: 0.6rem 1rem; }
+.install-card-next {
+  margin: 0;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Author card — who made this theme and where to reach them. The listing's
+   publish/delete controls live in the page header, not here: they're the
+   author's chrome, not part of what a visitor is reading. */
+.author-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+  padding: 1.25rem 1.5rem;
+}
+.author-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 0;
+}
+.author-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.author-avatar.is-platform { background: var(--fg); }
+.author-lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.author-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.author-meta {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+/* Author-defined pointers to docs, source, support — a hairline below the
+   identity rather than a card of their own. */
+.author-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+.author-links-empty { margin: 0; font-size: 0.82rem; line-height: 1.5; }
+.author-add-link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.author-add-link:hover { color: var(--accent); }
+.theme-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.theme-link {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  margin: 0 -0.4rem;
+  border-radius: 7px;
+}
+.theme-link::before {
+  content: "↗";
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+.theme-link:hover { background: var(--bg); }
+.theme-link[draggable="true"] { cursor: grab; }
+.theme-link.is-dragging { opacity: 0.4; }
+.theme-link a {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-link-remove {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.theme-link:hover .theme-link-remove,
+.theme-link-remove:focus-visible { opacity: 1; }
+.theme-link-remove:hover { color: var(--danger); }
+.link-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.link-form input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.9rem;
+  background: var(--card);
+}
+.link-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.link-form-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+@media (max-width: 900px) {
+  .theme-detail { grid-template-columns: 1fr; }
+  .theme-detail-aside { position: static; }
+}
+
+/* Manage dialog — a titled row with its control on the right. */
+.manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.manage-row h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.manage-row p {
+  margin: 0;
+  max-width: 44ch;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+.manage-row .btn { flex-shrink: 0; }
+.manage-row.is-danger {
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+}
+
+/* Confetti burst on install (see phx:celebrate in app.js). Pieces are
+   positioned and animated from JS; this only gives them a body. */
+.confetti-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  overflow: hidden;
+}
+.confetti-piece {
+  position: absolute;
+  width: 9px;
+  height: 12px;
+  margin: -6px 0 0 -4px;
+  border-radius: 2px;
+  will-change: transform, opacity;
+}
+
+/* The install button's moment: it pops in as "Installed". */
+.install-card .btn-installed {
+  animation: installed-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes installed-pop {
+  0% { transform: scale(0.9); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .install-card .btn-installed { animation: none; }
+}

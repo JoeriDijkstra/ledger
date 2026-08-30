@@ -35,7 +35,16 @@ defmodule Masthead.Themes.Theme do
     field :price_cents, :integer, default: 0
     belongs_to :owner, Masthead.Accounts.User
     has_many :sites, Masthead.Sites.Site
-    has_many :images, Masthead.Themes.ThemeImage, foreign_key: :theme_id
+    # Gallery order is the author's chosen order — a card's cover is the
+    # first image, so every preload must respect `position`.
+    has_many :images, Masthead.Themes.ThemeImage,
+      foreign_key: :theme_id,
+      preload_order: [asc: :position, asc: :id]
+
+    has_many :links, Masthead.Themes.ThemeLink,
+      foreign_key: :theme_id,
+      preload_order: [asc: :position, asc: :id]
+
     timestamps(type: :utc_datetime)
   end
 
@@ -101,7 +110,7 @@ defmodule Masthead.Themes.Theme do
 
   @doc """
   Changeset for editing an uploaded theme's marketplace details (the
-  description shown on its listing), from the theme manage page.
+  description shown on its listing), edited inline on the detail page.
   """
   def details_changeset(theme, attrs) do
     theme

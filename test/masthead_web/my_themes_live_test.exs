@@ -42,10 +42,10 @@ defmodule MastheadWeb.MyThemesLiveTest do
     assert {:error, {:redirect, %{to: "/marketplace/my-themes"}}} = live(conn, ~p"/themes")
   end
 
-  test "each theme card links to its manage page", %{conn: conn, theme: theme} do
+  test "each theme card links to its detail page", %{conn: conn, theme: theme} do
     {:ok, lv, _html} = live(conn, ~p"/marketplace/my-themes")
 
-    assert has_element?(lv, ~s(a[href="/marketplace/my-themes/#{theme.id}"]))
+    assert has_element?(lv, ~s(a[href="/marketplace/themes/#{theme.id}"]))
   end
 
   test "my themes lists built-ins and your own uploads, not others' themes", %{conn: conn} do

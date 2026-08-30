@@ -104,7 +104,7 @@ defmodule MastheadWeb.Router do
       live "/marketplace/verified", AdminLive.Marketplace, :verified
       live "/marketplace/community", AdminLive.Marketplace, :community
       live "/marketplace/my-themes", AdminLive.Marketplace, :mine
-      live "/marketplace/my-themes/:theme_id", AdminLive.ThemeManage, :show
+      live "/marketplace/themes/:theme_id", AdminLive.ThemeShow, :show
 
       live "/:site_slug", AdminLive.SiteDashboard, :show
       live "/:site_slug/settings", AdminLive.SiteSettings, :edit
