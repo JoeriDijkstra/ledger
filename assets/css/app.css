@@ -889,6 +889,8 @@ button.danger:hover { filter: brightness(0.92); }
      title shrink/wrap rather than push the buttons off-screen. */
   .page-head h1 { font-size: 1.3rem; min-width: 0; }
   .page-head .actions { flex-shrink: 0; }
+  /* The "Theme template" link is a nice-to-have; it crowds out the title. */
+  .page-head .actions .github-btn { display: none; }
 }
 
 /* Stats / cards */
@@ -1336,6 +1338,12 @@ button.danger:hover { filter: brightness(0.92); }
   align-items: center;
   gap: 0.5rem;
   flex: 0 1 auto;
+}
+/* On a phone the search box reads as an afterthought squeezed beside the
+   filters; give it the full row. */
+@media (max-width: 640px) {
+  .admin-toolbar-controls { flex: 1 1 100%; }
+  .admin-search { flex: 1 1 auto; }
 }
 .visibility-filter { margin: 0; }
 .visibility-filter select {
@@ -3311,6 +3319,23 @@ button.danger:hover { filter: brightness(0.92); }
 }
 .landing-footer-links a:hover { color: var(--landing-fg); }
 
+/* Stacked and centred on a phone — as three left-aligned rows the brand,
+   links and GitHub button read as unrelated fragments. */
+@media (max-width: 640px) {
+  .landing-footer {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 1.25rem;
+    padding: 1.75rem 1.25rem 2.5rem;
+  }
+  .landing-footer-links {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.75rem 1.25rem;
+  }
+}
+
 /* The signed-out marketplace: an admin body sitting between the marketing nav
    and footer. Same 1100px column as the homepage, so nothing shifts when a
    visitor arrives through the front page. */
@@ -3342,9 +3367,61 @@ button.danger:hover { filter: brightness(0.92); }
   .cta-card { padding: 2rem 1.5rem; }
 }
 
-@media (max-width: 500px) {
-  .landing-nav .github-btn span { display: none; }
-  .landing-nav .github-btn { padding: 0.4rem; }
+/* Mobile nav: the inline links collapse behind a hamburger. The toggle is a
+   checkbox rather than a scripted button so it works on the landing page,
+   which is a plain controller render with no LiveView attached. */
+.nav-burger { display: none; }
+/* Off-screen rather than display:none, so the menu is still keyboard-openable. */
+.nav-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .landing-nav { position: relative; padding: 1rem 1.25rem; }
+  .nav-burger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin: -0.25rem 0;
+    border-radius: 9px;
+    color: var(--landing-fg);
+    cursor: pointer;
+  }
+  .nav-burger svg { width: 24px; height: 24px; }
+  .nav-toggle:focus-visible + .nav-burger {
+    outline: 2px solid var(--landing-accent);
+    outline-offset: 2px;
+  }
+
+  .landing-nav .nav-cta {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 1.25rem;
+    right: 1.25rem;
+    z-index: 40;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.9rem;
+    padding: 1rem;
+    background: var(--landing-card);
+    border: 1px solid var(--landing-rule);
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.14);
+  }
+  .nav-toggle:checked ~ .nav-cta { display: flex; }
+  .landing-nav .nav-link { font-size: 1rem; }
+  /* The underline would sit on the row below in a stacked menu. */
+  .landing-nav .nav-link.is-active::after { display: none; }
+  .landing-nav .github-btn,
+  .landing-nav .btn { justify-content: center; }
 }
 
 /* Page intro paragraph — sits below the page-head title. */
@@ -3385,7 +3462,7 @@ button.danger:hover { filter: brightness(0.92); }
   padding: 0;
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
   gap: 1.25rem;
 }
 .marketplace-grid li { display: block; }
