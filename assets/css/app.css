@@ -772,15 +772,13 @@ button.danger:hover { filter: brightness(0.92); }
   margin-bottom: 2rem;
   gap: 1rem;
   padding: 1.5rem 1.75rem;
-  background: var(--card);
+  background:
+    linear-gradient(180deg, var(--accent), var(--violet)) left / 0.4rem 100% no-repeat,
+    var(--card);
   border: 1px solid var(--rule);
   border-radius: 14px;
   box-shadow: var(--shadow-sm);
   position: relative;
-  /* Not `overflow: hidden` — the presence popover needs to float outside the
-     card. The accent bar (::before) is rounded on its left corners instead so
-     it still respects the card's rounded corners. The z-index keeps the
-     floating popover above content below (stays under the sidebar/modals). */
   z-index: 15;
 }
 /* "Who's viewing" overlapping avatars, shown right after the page title.
@@ -853,14 +851,6 @@ button.danger:hover { filter: brightness(0.92); }
   transform: translateX(-50%) translateY(0);
 }
 
-.page-head::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: linear-gradient(180deg, var(--accent), var(--violet));
-  border-radius: 14px 0 0 14px;
-}
 .page-head h1 {
   margin: 0;
   padding-left: 0.4rem;
